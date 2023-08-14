@@ -20,7 +20,7 @@ pub mod ffi {
     }
 
     pub mod logger {
-        pub use crate::logger::{init, register_container, update_container, mainline_update_log_level};
+        pub use crate::logger::{init, mainline_update_log_level, register_container, update_container};
     }
 }
 

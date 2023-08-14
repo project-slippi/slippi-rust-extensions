@@ -38,7 +38,7 @@ pub extern "C" fn slprs_logging_update_container(kind: *const c_char, enabled: b
 }
 
 /// Updates the configuration for registered logging container on mainline
-/// 
+///
 /// For more information, see `dolphin_logger::update_container`.
 #[no_mangle]
 pub extern "C" fn slprs_mainline_logging_update_log_level(level: c_int) {
