@@ -1,0 +1,33 @@
+name: Builds
+
+on:
+  push:
+    branches:
+        - "**"
+    paths-ignore:
+        - "**.md"
+  pull_request:
+    branches:
+      - "**"
+    paths-ignore:
+      - "**.md"
+
+jobs:
+  slprs_cargo_fmt:
+    name: Cargo Format
+    runs-on: ubuntu-latest
+    outputs:
+      rust_ver: ${{ steps.rust_ver.outputs.rust_ver }}
+    steps:
+      - uses: actions/checkout@v3
+      - id: rust_ver
+        name: Grab Rust Version
+        run: echo "rust_ver=$(sed -rn 's/^channel = "(.*)"/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ steps.rust_ver.outputs.rust_ver }}
+          components: rustfmt
+      - name: Rustfmt Check
+        uses: actions-rust-lang/rustfmt@v1
+      - name: "Run cargo test"
+        run: cargo test --all --all-features
