@@ -1,4 +1,4 @@
-name: Builds
+name: Format and Test
 
 on:
   push:
@@ -14,19 +14,11 @@ on:
 
 jobs:
   slprs_cargo_fmt:
-    name: Cargo Format and Test
+    name: Cargo Format
     runs-on: ubuntu-latest
     outputs:
       rust_ver: ${{ steps.rust_ver.outputs.rust_ver }}
     steps:
-      - name: "Install prerequisites"
-        if: success()
-        shell: bash
-        run: |
-          sudo dpkg --add-architecture amd64
-          sudo apt update
-          sudo apt install \
-          libasound2-dev
       - uses: actions/checkout@v3
       - id: rust_ver
         name: Grab Rust Version
@@ -37,5 +29,29 @@ jobs:
           components: rustfmt
       - name: Rustfmt Check
         uses: actions-rust-lang/rustfmt@v1
+
+  slprs_cargo_test:
+    needs: slprs_cargo_fmt
+    name: Cargo Test on rust ${{ needs.slprs_cargo_fmt.outputs.rust_ver }} and ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v3
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: ${{ needs.slprs_cargo_fmt.outputs.rust_ver }}
+          components: rustfmt
+      - name: "Install prerequisites"
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          sudo dpkg --add-architecture amd64
+          sudo apt update
+          sudo apt install \
+          libasound2-dev
       - name: "Run cargo test"
         run: cargo test --all --all-features
