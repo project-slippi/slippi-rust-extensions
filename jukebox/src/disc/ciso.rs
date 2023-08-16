@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io::{Read, Seek};
 
-use crate::fst::{self, IsoKind};
+use crate::disc::{self, IsoKind};
 use crate::{JukeboxError::*, Result};
 
 const CISO_HEADER_SIZE: usize = 0x8000;
@@ -13,7 +13,7 @@ type CisoHeader = (u32, [u8; CISO_BLOCK_MAP_SIZE]);
 /// Get the header of a ciso disc image. If the provided file is not a ciso,
 /// `None` will be returned
 pub(crate) fn get_ciso_header(iso: &mut File) -> Result<Option<CisoHeader>> {
-    match fst::get_iso_kind(iso)? {
+    match disc::get_iso_kind(iso)? {
         IsoKind::Ciso => {
             // Get the block size
             let mut block_size = [0; 0x4];
@@ -56,8 +56,8 @@ pub(crate) fn get_ciso_offset(header: &CisoHeader, offset: u64) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
 
+    #[test]
     fn doesnt_try_to_read_headers_from_non_ciso_files() {
         let mut file = File::open("test-data/misow.bin").unwrap();
         let header = get_ciso_header(&mut file).unwrap();
