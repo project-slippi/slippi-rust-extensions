@@ -15,9 +15,6 @@ mod utils;
 
 pub(crate) type Result<T> = std::result::Result<T, JukeboxError>;
 
-/// Represents a foreign method from the Dolphin side for grabbing the current volume.
-/// Dolphin represents this as a number from 0 - 100; 0 being mute.
-pub type ForeignGetVolumeFn = unsafe extern "C" fn() -> std::ffi::c_int;
 
 /// By default Slippi Jukebox plays music slightly louder than vanilla melee
 /// does. This reduces the overall music volume output to 80%. Not totally sure
@@ -28,11 +25,13 @@ pub struct Jukebox {
     iso_path: String,
     _output_stream: OutputStream,
     sink: Sink,
-    get_dolphin_volume_fn: ForeignGetVolumeFn,
+    dolphin_system_volume: f32,
+    dolphin_music_volume: f32,
+    melee_volume: f32,
 }
 
 impl Jukebox {
-    pub fn new(iso_path: String, get_dolphin_volume_fn: ForeignGetVolumeFn) -> Result<Self> {
+    pub fn new(iso_path: String, dolphin_system_volume: f32, dolphin_music_volume: f32) -> Result<Self> {
         let mut iso = File::open(&iso_path)?;
         let iso_kind = disc::get_iso_kind(&mut iso)?;
 
@@ -56,7 +55,9 @@ impl Jukebox {
             iso_path,
             _output_stream: output_stream,
             sink,
-            get_dolphin_volume_fn,
+            dolphin_system_volume,
+            dolphin_music_volume,
+            melee_volume: 1.0,
         })
     }
 
@@ -89,9 +90,25 @@ impl Jukebox {
     pub fn set_music_volume(&mut self, volume: u8) {
         tracing::info!(target: Log::Jukebox, "Change in-game music volume: {volume}");
 
-        let melee_volume = (volume as f32 / 254.0).clamp(0.0, 1.0);
-        let dolphin_volume = unsafe { (self.get_dolphin_volume_fn)() as f32 / 100.0 };
-        let volume = melee_volume * dolphin_volume * VOLUME_REDUCTION_MULTIPLIER;
+        self.melee_volume = (volume as f32 / 254.0).clamp(0.0, 1.0);
+        self.update_sink_volume();
+    }
+
+    pub fn set_dolphin_system_volume(&mut self, volume: u8) {
+        tracing::info!(target: Log::Jukebox, "Dolphin system volume changed: {volume}");
+        self.dolphin_system_volume = volume as f32 / 100.0;
+        self.update_sink_volume();
+    }
+
+    pub fn set_dolphin_music_volume(&mut self, volume: u8) {
+        tracing::info!(target: Log::Jukebox, "Dolphin music volume changed: {volume}");
+        self.dolphin_music_volume = volume as f32 / 100.0;
+        self.update_sink_volume();
+    }
+
+    fn update_sink_volume(&mut self) {
+        let dolphin_volume = self.dolphin_system_volume * self.dolphin_music_volume;
+        let volume = self.melee_volume * dolphin_volume * VOLUME_REDUCTION_MULTIPLIER;
 
         self.sink.set_volume(volume);
     }

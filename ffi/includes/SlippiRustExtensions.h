@@ -84,7 +84,8 @@ void slprs_exi_device_reporter_push_replay_data(uintptr_t instance_ptr,
 /// the road though and is not set in stone.
 void slprs_exi_device_configure_jukebox(uintptr_t exi_device_instance_ptr,
                                         bool is_enabled,
-                                        int (*get_dolphin_volume_fn)());
+                                        uint8_t raw_dolphin_system_volume,
+                                        uint8_t raw_dolphin_music_volume);
 
 void slprs_exi_device_jukebox_play_music(uintptr_t exi_device_instance_ptr,
                                          uint64_t hps_offset,
@@ -93,6 +94,12 @@ void slprs_exi_device_jukebox_play_music(uintptr_t exi_device_instance_ptr,
 void slprs_exi_device_jukebox_stop_music(uintptr_t exi_device_instance_ptr);
 
 void slprs_exi_device_jukebox_set_music_volume(uintptr_t exi_device_instance_ptr, uint8_t volume);
+
+void slprs_exi_device_jukebox_set_dolphin_system_volume(uintptr_t exi_device_instance_ptr,
+                                                        uint8_t volume);
+
+void slprs_exi_device_jukebox_set_dolphin_music_volume(uintptr_t exi_device_instance_ptr,
+                                                       uint8_t volume);
 
 /// Creates a new Player Report and leaks it, returning the pointer.
 ///
