@@ -33,7 +33,6 @@ pub struct Jukebox {
 
 impl Jukebox {
     pub fn new(iso_path: String, get_dolphin_volume_fn: ForeignGetVolumeFn) -> Result<Self> {
-        tracing::info!(target: Log::Jukebox, "Initializing Slippi Jukebox");
         let mut iso = File::open(&iso_path)?;
         let iso_kind = disc::get_iso_kind(&mut iso)?;
 
@@ -51,6 +50,8 @@ impl Jukebox {
         let (output_stream, stream_handle) = OutputStream::try_default()?;
         let sink = Sink::try_new(&stream_handle)?;
 
+        tracing::info!(target: Log::Jukebox, "Slippi Jukebox Initialized");
+
         Ok(Self {
             iso_path,
             _output_stream: output_stream,
@@ -60,6 +61,11 @@ impl Jukebox {
     }
 
     pub fn play_music(&mut self, hps_offset: u64, hps_length: usize) -> Result<()> {
+        tracing::info!(
+            target: Log::Jukebox,
+            "Play music. Offset: 0x{hps_offset:0x?}, Length: {hps_length}"
+        );
+
         let get_real_offset = disc::create_offset_locator_fn(&self.iso_path)?;
         let real_hps_offset = get_real_offset(hps_offset).ok_or(OffsetMissingFromCompressedIso(hps_offset))?;
 
@@ -75,10 +81,14 @@ impl Jukebox {
     }
 
     pub fn stop_music(&mut self) {
+        tracing::info!(target: Log::Jukebox, "Stop music");
+
         self.sink.stop();
     }
 
     pub fn set_music_volume(&mut self, volume: u8) {
+        tracing::info!(target: Log::Jukebox, "Change in-game music volume: {volume}");
+
         let melee_volume = (volume as f32 / 254.0).clamp(0.0, 1.0);
         let dolphin_volume = unsafe { (self.get_dolphin_volume_fn)() as f32 / 100.0 };
         let volume = melee_volume * dolphin_volume * VOLUME_REDUCTION_MULTIPLIER;
