@@ -40,13 +40,13 @@ impl SlippiEXIDevice {
     pub fn dma_read(&mut self, _address: usize, _size: usize) {}
 
     /// Configures a new Jukebox, or ensures an existing one is dropped if it's being disabled.
-    pub fn configure_jukebox(&mut self, is_enabled: bool, get_dolphin_volume_fn: slippi_jukebox::ForeignGetVolumeFn) {
+    pub fn configure_jukebox(&mut self, is_enabled: bool) {
         if !is_enabled {
             self.jukebox = None;
             return;
         }
 
-        match Jukebox::new(self.iso_path.clone(), get_dolphin_volume_fn) {
+        match Jukebox::new(self.iso_path.clone(), 1.0, 1.0) {
             Ok(jukebox) => {
                 self.jukebox = Some(jukebox);
             },
@@ -61,13 +61,7 @@ impl SlippiEXIDevice {
 
     pub fn jukebox_play_music(&mut self, hps_offset: u64, hps_length: usize) {
         if let Some(jukebox) = self.jukebox.as_mut() {
-            if let Err(e) = jukebox.play_music(hps_offset, hps_length) {
-                tracing::error!(
-                    target: Log::EXI,
-                    error = ?e,
-                    "Failed to play jukebox song music"
-                )
-            }
+            jukebox.play_music(hps_offset, hps_length);
         }
     }
 
@@ -79,7 +73,7 @@ impl SlippiEXIDevice {
 
     pub fn jukebox_set_music_volume(&mut self, volume: u8) {
         if let Some(jukebox) = self.jukebox.as_mut() {
-            jukebox.set_music_volume(volume);
+            jukebox.set_melee_music_volume(volume);
         }
     }
 }
