@@ -11,6 +11,8 @@ pub use errors::JukeboxError;
 use JukeboxError::*;
 
 mod disc;
+use disc::{get_iso_kind, get_real_offset, IsoKind};
+
 mod utils;
 
 pub(crate) type Result<T> = std::result::Result<T, JukeboxError>;
@@ -25,7 +27,7 @@ pub type ForeignGetVolumeFn = unsafe extern "C" fn() -> std::ffi::c_int;
 const VOLUME_REDUCTION_MULTIPLIER: f32 = 0.8;
 
 pub struct Jukebox {
-    iso_path: String,
+    iso: File,
     _output_stream: OutputStream,
     sink: Sink,
     get_dolphin_volume_fn: ForeignGetVolumeFn,
@@ -34,10 +36,9 @@ pub struct Jukebox {
 impl Jukebox {
     pub fn new(iso_path: String, get_dolphin_volume_fn: ForeignGetVolumeFn) -> Result<Self> {
         let mut iso = File::open(&iso_path)?;
-        let iso_kind = disc::get_iso_kind(&mut iso)?;
 
         // Make sure the provided ISO is supported
-        if let disc::IsoKind::Unknown = iso_kind {
+        if let IsoKind::Unknown = get_iso_kind(&mut iso)? {
             Dolphin::add_osd_message(
                 Color::Red,
                 OSDDuration::VeryLong,
@@ -53,7 +54,7 @@ impl Jukebox {
         tracing::info!(target: Log::Jukebox, "Slippi Jukebox Initialized");
 
         Ok(Self {
-            iso_path,
+            iso,
             _output_stream: output_stream,
             sink,
             get_dolphin_volume_fn,
@@ -66,11 +67,9 @@ impl Jukebox {
             "Play music. Offset: 0x{hps_offset:0x?}, Length: {hps_length}"
         );
 
-        let get_real_offset = disc::create_offset_locator_fn(&self.iso_path)?;
-        let real_hps_offset = get_real_offset(hps_offset).ok_or(OffsetMissingFromCompressedIso(hps_offset))?;
+        let real_hps_offset = get_real_offset(&mut self.iso, hps_offset)?.ok_or(OffsetMissingFromCompressedIso(hps_offset))?;
 
-        let mut iso = File::open(&self.iso_path)?;
-        let hps: Hps = utils::copy_bytes_from_file(&mut iso, real_hps_offset, hps_length)?.try_into()?;
+        let hps: Hps = utils::copy_bytes_from_file(&mut self.iso, real_hps_offset, hps_length)?.try_into()?;
         let audio_source = HpsAudioSource(hps.into());
 
         self.sink.stop();

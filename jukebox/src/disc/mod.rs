@@ -36,30 +36,20 @@ pub(crate) fn get_iso_kind(iso: &mut File) -> Result<IsoKind> {
 
 /// When we want to read data from any given iso file, but we only know the
 /// offset for a standard disc image, we need a way to be able to get the
-/// _actual_ offset for the file we have on hand.
+/// _actual_ offset for the file we have on hand. This can vary depending on the
+/// kind of disc image that we are dealing with (standard vs ciso, for example).
 ///
-/// This can vary depending on the kind of disc image that we are dealing with
-/// (standard vs ciso, for example)
-///
-/// This HoF returns a fn that can be used to locate the true offset.
-///
-/// Example Usage:
-/// ```ignore
-/// let get_true_offset = create_offset_locator_fn("/foo/bar.iso");
-/// let offset = get_true_offset(0x424);
-/// ```
-pub(crate) fn create_offset_locator_fn(iso_path: &str) -> Result<impl Fn(u64) -> Option<u64> + '_> {
-    let mut iso = File::open(iso_path)?;
-
+/// This function can be used to locate the true offset.
+pub(crate) fn get_real_offset(iso: &mut File, offset: u64) -> Result<Option<u64>> {
     // Get the ciso header (block size and block map) of the provided file.
     // If the file is not a ciso, this will be `None`
-    let ciso_header = match get_iso_kind(&mut iso)? {
+    let ciso_header = match get_iso_kind(iso)? {
         IsoKind::Standard => None,
-        IsoKind::Ciso => ciso::get_ciso_header(&mut iso)?,
+        IsoKind::Ciso => ciso::get_ciso_header(iso)?,
         IsoKind::Unknown => return Err(UnsupportedIso),
     };
 
-    Ok(move |offset| match ciso_header {
+    Ok(match ciso_header {
         Some(ciso_header) => ciso::get_ciso_offset(&ciso_header, offset),
         None => Some(offset),
     })
