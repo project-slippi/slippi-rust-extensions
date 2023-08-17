@@ -164,9 +164,9 @@ impl Jukebox {
         self.tx.send(SetDolphinSystemVolume(volume)).ok();
     }
 
-    /// Indicates to the jukebox instance that Dolphin's audio config volume has
-    /// changed. The instance will handle this appropriately considering other
-    /// existing volume controls
+    /// Indicates to the jukebox instance that Dolphin's "Jukebox volume" slider
+    /// has changed. The instance will handle this appropriately considering
+    /// other existing volume controls
     pub fn set_dolphin_music_volume(&mut self, volume: u8) {
         tracing::info!(target: Log::Jukebox, "Change jukebox music volume: {volume}");
         self.tx.send(SetDolphinMusicVolume(volume)).ok();
