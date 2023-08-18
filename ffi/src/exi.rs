@@ -207,19 +207,21 @@ pub extern "C" fn slprs_exi_device_configure_jukebox(
     let _leak = Box::into_raw(device);
 }
 
+/// Calls through to `Jukebox::start_song`.
 #[no_mangle]
-pub extern "C" fn slprs_exi_device_jukebox_play_music(exi_device_instance_ptr: usize, hps_offset: u64, hps_length: usize) {
+pub extern "C" fn slprs_exi_device_jukebox_start_song(exi_device_instance_ptr: usize, hps_offset: u64, hps_length: usize) {
     // Coerce the instance from the pointer. This is theoretically safe since we control
     // the C++ side and can guarantee that the `exi_device_instance_ptr` is only owned
     // by the C++ EXI device, and is created/destroyed with the corresponding lifetimes.
     let mut device = unsafe { Box::from_raw(exi_device_instance_ptr as *mut SlippiEXIDevice) };
 
-    device.jukebox_play_music(hps_offset, hps_length);
+    device.jukebox_start_song(hps_offset, hps_length);
 
     // Fall back into a raw pointer so Rust doesn't obliterate the object.
     let _leak = Box::into_raw(device);
 }
 
+/// Calls through to `Jukebox::stop_music`.
 #[no_mangle]
 pub extern "C" fn slprs_exi_device_jukebox_stop_music(exi_device_instance_ptr: usize) {
     // Coerce the instance from the pointer. This is theoretically safe since we control
@@ -233,14 +235,15 @@ pub extern "C" fn slprs_exi_device_jukebox_stop_music(exi_device_instance_ptr: u
     let _leak = Box::into_raw(device);
 }
 
+/// Calls through to `Jukebox::set_melee_music_volume`.
 #[no_mangle]
-pub extern "C" fn slprs_exi_device_jukebox_set_music_volume(exi_device_instance_ptr: usize, volume: u8) {
+pub extern "C" fn slprs_exi_device_jukebox_set_melee_music_volume(exi_device_instance_ptr: usize, volume: u8) {
     // Coerce the instance from the pointer. This is theoretically safe since we control
     // the C++ side and can guarantee that the `exi_device_instance_ptr` is only owned
     // by the C++ EXI device, and is created/destroyed with the corresponding lifetimes.
     let mut device = unsafe { Box::from_raw(exi_device_instance_ptr as *mut SlippiEXIDevice) };
 
-    device.jukebox_set_music_volume(volume);
+    device.jukebox_set_melee_music_volume(volume);
 
     // Fall back into a raw pointer so Rust doesn't obliterate the object.
     let _leak = Box::into_raw(device);

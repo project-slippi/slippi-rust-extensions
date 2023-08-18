@@ -27,7 +27,7 @@ const VOLUME_REDUCTION_MULTIPLIER: f32 = 0.8;
 
 #[derive(Debug)]
 pub enum Message {
-    PlaySong(u64, usize),
+    StartSong(u64, usize),
     StopMusic,
     SetMeleeMusicVolume(u8),
     SetDolphinSystemVolume(u8),
@@ -97,7 +97,7 @@ impl Jukebox {
 
         loop {
             match rx.recv()? {
-                PlaySong(hps_offset, hps_length) => {
+                StartSong(hps_offset, hps_length) => {
                     let real_hps_offset =
                         get_real_offset(&mut iso, hps_offset)?.ok_or(OffsetMissingFromCompressedIso(hps_offset))?;
 
@@ -129,12 +129,12 @@ impl Jukebox {
     /// Loads the music file in the iso at offset `hps_offset` with a length of
     /// `hps_length`, decodes it into audio, and plays it back using the default
     /// audio device
-    pub fn play_music(&mut self, hps_offset: u64, hps_length: usize) {
+    pub fn start_song(&mut self, hps_offset: u64, hps_length: usize) {
         tracing::info!(
             target: Log::Jukebox,
-            "Play music. Offset: 0x{hps_offset:0x?}, Length: {hps_length}"
+            "Start song. Offset: 0x{hps_offset:0x?}, Length: {hps_length}"
         );
-        self.tx.send(PlaySong(hps_offset, hps_length)).ok();
+        self.tx.send(StartSong(hps_offset, hps_length)).ok();
     }
 
     /// Stops any currently playing music

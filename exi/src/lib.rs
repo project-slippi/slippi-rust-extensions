@@ -59,9 +59,9 @@ impl SlippiEXIDevice {
         }
     }
 
-    pub fn jukebox_play_music(&mut self, hps_offset: u64, hps_length: usize) {
+    pub fn jukebox_start_song(&mut self, hps_offset: u64, hps_length: usize) {
         if let Some(jukebox) = self.jukebox.as_mut() {
-            jukebox.play_music(hps_offset, hps_length);
+            jukebox.start_song(hps_offset, hps_length);
         }
     }
 
@@ -71,7 +71,7 @@ impl SlippiEXIDevice {
         }
     }
 
-    pub fn jukebox_set_music_volume(&mut self, volume: u8) {
+    pub fn jukebox_set_melee_music_volume(&mut self, volume: u8) {
         if let Some(jukebox) = self.jukebox.as_mut() {
             jukebox.set_melee_music_volume(volume);
         }
