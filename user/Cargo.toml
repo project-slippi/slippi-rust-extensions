@@ -1,0 +1,24 @@
+[package]
+name = "slippi-user"
+description = "Data models and helpers for user authentication status."
+authors = [
+    "Slippi Team",
+    "Ryan McGrath <ryan@rymc.io>"
+]
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[features]
+default = ["ishiiruka"]
+ishiiruka = []
+mainline = []
+playback = []
+
+[dependencies]
+dolphin-integrations = { path = "../dolphin" }
+open = "5"
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+ureq = { workspace = true }

@@ -21,7 +21,8 @@ default = ["ishiiruka"]
 ishiiruka = [
     "dolphin-integrations/ishiiruka",
     "slippi-game-reporter/ishiiruka",
-    "slippi-exi-device/ishiiruka"
+    "slippi-exi-device/ishiiruka",
+    "slippi-user/ishiiruka"
 ]
 mainline = []
 playback = []
@@ -30,4 +31,5 @@ playback = []
 dolphin-integrations = { path = "../dolphin" }
 slippi-game-reporter = { path = "../game-reporter" }
 slippi-exi-device = { path = "../exi" }
+slippi-user = { path = "../user" }
 tracing = { workspace = true }
