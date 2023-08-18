@@ -18,6 +18,6 @@ mainline = []
 [dependencies]
 dolphin-integrations = { path = "../dolphin" }
 hps_decode = "0.1.1"
-rodio = "0.17.1"
+rodio = { version = "0.17.1", default-features = false }
 thiserror = "1.0.44"
 tracing = { workspace = true }
