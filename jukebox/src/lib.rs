@@ -20,19 +20,10 @@ mod utils;
 
 pub(crate) type Result<T> = std::result::Result<T, JukeboxError>;
 
-/// Represents a foreign method from the Dolphin side for grabbing the current volume.
-/// Dolphin represents this as a number from 0 - 100; 0 being mute.
-pub type ForeignGetVolumeFn = unsafe extern "C" fn() -> std::ffi::c_int;
-
 /// By default Slippi Jukebox plays music slightly louder than vanilla melee
 /// does. This reduces the overall music volume output to 80%. Not totally sure
 /// if that's the correct amount, but it sounds about right.
 const VOLUME_REDUCTION_MULTIPLIER: f32 = 0.8;
-
-#[derive(Debug)]
-pub struct Jukebox {
-    tx: Sender<Message>,
-}
 
 #[derive(Debug)]
 pub enum Message {
@@ -42,6 +33,11 @@ pub enum Message {
     SetDolphinSystemVolume(u8),
     SetDolphinMusicVolume(u8),
     JukeboxDropped,
+}
+
+#[derive(Debug)]
+pub struct Jukebox {
+    tx: Sender<Message>,
 }
 
 impl Jukebox {
@@ -67,16 +63,15 @@ impl Jukebox {
         // Spawn the thread that will handle loading music and playing it back
         std::thread::Builder::new()
             .name("SlippiJukebox".to_string())
-            .spawn(
-                move || match Self::start(iso_path, dolphin_system_volume, dolphin_music_volume, rx) {
-                    Err(e) => tracing::error!(
+            .spawn(move || {
+                if let Err(e) = Self::start(rx, iso_path, dolphin_system_volume, dolphin_music_volume) {
+                    tracing::error!(
                         target: Log::Jukebox,
                         error = ?e,
                         "SlippiJukebox thread encountered an error: {e}"
-                    ),
-                    _ => (),
-                },
-            )
+                    );
+                }
+            })
             .map_err(ThreadSpawn)?;
 
         Ok(Self { tx })
@@ -85,15 +80,20 @@ impl Jukebox {
     /// This can be thought of as jukebox's "main" function.
     /// It runs in it's own thread on a loop, awaiting messages from the main
     /// thread. The message handlers control music playback.
-    fn start(iso_path: String, dolphin_system_volume: f32, dolphin_music_volume: f32, rx: Receiver<Message>) -> Result<()> {
+    fn start(rx: Receiver<Message>, iso_path: String, dolphin_system_volume: f32, dolphin_music_volume: f32) -> Result<()> {
         let (_stream, stream_handle) = OutputStream::try_default()?;
         let sink = Sink::try_new(&stream_handle)?;
 
         let mut iso = File::open(&iso_path)?;
 
-        let mut melee_music_volume = 1.0;
-        let mut dolphin_system_volume = dolphin_system_volume;
-        let mut dolphin_music_volume = dolphin_music_volume;
+        let mut volume = Volume {
+            melee_music: 1.0,
+            dolphin_system: dolphin_system_volume,
+            dolphin_music: dolphin_music_volume,
+        };
+
+        let set_sink_volume =
+            |v: &Volume| sink.set_volume(v.melee_music * v.dolphin_music * v.dolphin_system * VOLUME_REDUCTION_MULTIPLIER);
 
         loop {
             match rx.recv()? {
@@ -108,23 +108,17 @@ impl Jukebox {
                     sink.append(audio_source);
                     sink.play();
                 },
-                SetMeleeMusicVolume(volume) => {
-                    melee_music_volume = (volume as f32 / 254.0).clamp(0.0, 1.0);
-                    sink.set_volume(
-                        melee_music_volume * dolphin_music_volume * dolphin_music_volume * VOLUME_REDUCTION_MULTIPLIER,
-                    );
+                SetMeleeMusicVolume(value) => {
+                    volume.melee_music = (value as f32 / 254.0).clamp(0.0, 1.0);
+                    set_sink_volume(&volume);
                 },
-                SetDolphinSystemVolume(volume) => {
-                    dolphin_system_volume = volume as f32 / 100.0;
-                    sink.set_volume(
-                        melee_music_volume * dolphin_music_volume * dolphin_system_volume * VOLUME_REDUCTION_MULTIPLIER,
-                    );
+                SetDolphinSystemVolume(value) => {
+                    volume.dolphin_system = (value as f32 / 100.0).clamp(0.0, 1.0);
+                    set_sink_volume(&volume);
                 },
-                SetDolphinMusicVolume(volume) => {
-                    dolphin_music_volume = volume as f32 / 100.0;
-                    sink.set_volume(
-                        melee_music_volume * dolphin_music_volume * dolphin_system_volume * VOLUME_REDUCTION_MULTIPLIER,
-                    );
+                SetDolphinMusicVolume(value) => {
+                    volume.dolphin_music = (value as f32 / 100.0).clamp(0.0, 1.0);
+                    set_sink_volume(&volume);
                 },
                 StopMusic => sink.stop(),
                 JukeboxDropped => return Ok(()),
@@ -133,7 +127,8 @@ impl Jukebox {
     }
 
     /// Loads the music file in the iso at offset `hps_offset` with a length of
-    /// `hps_length`, decodes it into audio, and plays it back.
+    /// `hps_length`, decodes it into audio, and plays it back using the default
+    /// audio device
     pub fn play_music(&mut self, hps_offset: u64, hps_length: usize) {
         tracing::info!(
             target: Log::Jukebox,
@@ -148,25 +143,21 @@ impl Jukebox {
         self.tx.send(StopMusic).ok();
     }
 
-    /// Indicates to the jukebox instance that melee's in-game volume has
-    /// changed. The instance will handle this appropriately considering other
-    /// existing volume controls
+    /// Indicate to the jukebox instance that melee's in-game volume has changed
     pub fn set_melee_music_volume(&mut self, volume: u8) {
         tracing::info!(target: Log::Jukebox, "Change in-game music volume: {volume}");
         self.tx.send(SetMeleeMusicVolume(volume)).ok();
     }
 
-    /// Indicates to the jukebox instance that Dolphin's audio config volume has
-    /// changed. The instance will handle this appropriately considering other
-    /// existing volume controls
+    /// Indicate to the jukebox instance that Dolphin's audio config volume has
+    /// changed
     pub fn set_dolphin_system_volume(&mut self, volume: u8) {
         tracing::info!(target: Log::Jukebox, "Change dolphin audio config volume: {volume}");
         self.tx.send(SetDolphinSystemVolume(volume)).ok();
     }
 
-    /// Indicates to the jukebox instance that Dolphin's "Jukebox volume" slider
-    /// has changed. The instance will handle this appropriately considering
-    /// other existing volume controls
+    /// Indicate to the jukebox instance that Dolphin's "Jukebox volume" slider
+    /// value has changed
     pub fn set_dolphin_music_volume(&mut self, volume: u8) {
         tracing::info!(target: Log::Jukebox, "Change jukebox music volume: {volume}");
         self.tx.send(SetDolphinMusicVolume(volume)).ok();
@@ -183,6 +174,12 @@ impl Drop for Jukebox {
             );
         }
     }
+}
+
+struct Volume {
+    melee_music: f32,
+    dolphin_music: f32,
+    dolphin_system: f32,
 }
 
 // This wrapper allows us to implement `rodio::Source`
