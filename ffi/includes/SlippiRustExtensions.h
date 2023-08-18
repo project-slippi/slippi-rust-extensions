@@ -82,9 +82,7 @@ void slprs_exi_device_reporter_push_replay_data(uintptr_t instance_ptr,
 /// Configures the Jukebox process. This needs to be called after the EXI device is created
 /// in order for certain pieces of Dolphin to be properly initalized; this may change down
 /// the road though and is not set in stone.
-void slprs_exi_device_configure_jukebox(uintptr_t exi_device_instance_ptr,
-                                        bool is_enabled,
-                                        int (*get_dolphin_volume_fn)());
+void slprs_exi_device_configure_jukebox(uintptr_t exi_device_instance_ptr, bool is_enabled);
 
 /// Calls through to `Jukebox::start_song`.
 void slprs_exi_device_jukebox_start_song(uintptr_t exi_device_instance_ptr,

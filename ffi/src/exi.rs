@@ -1,4 +1,4 @@
-use std::ffi::{c_char, c_int};
+use std::ffi::c_char;
 
 use dolphin_integrations::Log;
 use slippi_exi_device::SlippiEXIDevice;
@@ -191,11 +191,7 @@ pub extern "C" fn slprs_exi_device_reporter_push_replay_data(instance_ptr: usize
 /// in order for certain pieces of Dolphin to be properly initalized; this may change down
 /// the road though and is not set in stone.
 #[no_mangle]
-pub extern "C" fn slprs_exi_device_configure_jukebox(
-    exi_device_instance_ptr: usize,
-    is_enabled: bool,
-    get_dolphin_volume_fn: unsafe extern "C" fn() -> c_int,
-) {
+pub extern "C" fn slprs_exi_device_configure_jukebox(exi_device_instance_ptr: usize, is_enabled: bool) {
     // Coerce the instance from the pointer. This is theoretically safe since we control
     // the C++ side and can guarantee that the `exi_device_instance_ptr` is only owned
     // by the C++ EXI device, and is created/destroyed with the corresponding lifetimes.
