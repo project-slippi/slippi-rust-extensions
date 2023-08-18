@@ -5,17 +5,14 @@ pub const DEFAULT_CHAT_MESSAGES: [&'static str; 16] = [
     "one more",
     "brb",
     "good luck",
-
     "well played",
     "that was fun",
     "thanks",
     "too good",
-
     "sorry",
     "my b",
     "lol",
     "wow",
-
     "gotta go",
     "one sec",
     "let's play again later",

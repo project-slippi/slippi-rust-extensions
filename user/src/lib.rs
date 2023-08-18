@@ -2,8 +2,8 @@
 //! from within Slippi Dolphin.
 
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -22,7 +22,7 @@ pub struct UserInfo {
     pub connect_code: String,
     pub latest_version: String,
     pub port: i64,
-    pub chat_messages: Vec<String>
+    pub chat_messages: Vec<String>,
 }
 
 /// This type manages access to user information, as well as any background thread watching
@@ -32,7 +32,7 @@ pub struct SlippiUser {
     info: Option<UserInfo>,
     user_json_path: Arc<PathBuf>,
     should_listen_for_auth: Arc<AtomicBool>,
-    user_file_listener_thread: Option<thread::JoinHandle<()>>
+    user_file_listener_thread: Option<thread::JoinHandle<()>>,
 }
 
 impl SlippiUser {
@@ -47,7 +47,7 @@ impl SlippiUser {
             info: None,
             user_json_path: Arc::new(user_folder_path.join("user.json")),
             should_listen_for_auth: Arc::new(AtomicBool::new(false)),
-            user_file_listener_thread: None
+            user_file_listener_thread: None,
         }
     }
 
@@ -135,9 +135,7 @@ fn attempt_login(user_json_path: &PathBuf) -> bool {
                     false
                 },
 
-                Err(e) => {
-                    false
-                }
+                Err(e) => false,
             }
         },
 
@@ -148,7 +146,7 @@ fn attempt_login(user_json_path: &PathBuf) -> bool {
             }
 
             false
-        }
+        },
     }
 }
 
@@ -165,6 +163,4 @@ fn update_app() -> bool {
 
 /// Calls out to the Slippi server and fetches the user info, patching up the user info object
 /// with any returned information.
-fn overwrite_from_server() {
-
-}
+fn overwrite_from_server() {}
