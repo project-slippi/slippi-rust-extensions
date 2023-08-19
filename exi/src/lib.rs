@@ -55,7 +55,7 @@ impl SlippiEXIDevice {
         }
 
         if self.jukebox.is_some() {
-            tracing::info!(target: Log::EXI, "Jukebox is already active");
+            tracing::warn!(target: Log::EXI, "Jukebox is already active");
             return;
         }
 
