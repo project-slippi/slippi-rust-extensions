@@ -64,7 +64,11 @@ impl SlippiEXIDevice {
             initial_dolphin_music_volume,
         } = config
         {
-            match Jukebox::new(self.iso_path.clone(), initial_dolphin_system_volume, initial_dolphin_music_volume) {
+            match Jukebox::new(
+                self.iso_path.clone(),
+                initial_dolphin_system_volume,
+                initial_dolphin_music_volume,
+            ) {
                 Ok(jukebox) => {
                     self.jukebox = Some(jukebox);
                 },
