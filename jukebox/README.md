@@ -2,38 +2,21 @@
 
 Slippi Jukebox serves as an integrated solution for playing Melee's OST in a way that's effectively independent from emulation.
 
-## Features
+## How music is controlled
 
-- Menu music
-- All stage music
-- Alternate stage music<sup>1</sup>
-- "Versus" splash screen jingle
-- Ranked stage striking music 
-- Auto-ducking music volume when pausing the game
-- _Break the Targets_ + _Home Run Contest_ music
-- Controlling volume with the in-game options and Dolphin's audio volume slider
-- Lottery menu music
-- Single player mode<sup>2</sup>
+Three injections have been added game-side (not in this repo) to enable Jukebox to function. These injections send messages to the Slippi EXI Device:
 
-1. _Alternate stage music has a 12.5% chance of playing. Holding triggers to force alternate tracks to play is not supported._
+- The first is in the `fileLoad_HPS` function. This runs once whenever the game is about to play a new song.
+- The second is in `Music_StopMusic`, which runs whenever the game wants to stop music playback.
+- The third is `DSP_Process`. This injection runs right after the game finishes calculating the "final music volume" variable which includes sound setting, pause multiplier, starman multiplier, etc. The function runs once per frame, so the previous volume is stored - this allows a message to be sent only when the value has changed.
 
-2. _In some 1P modes, stage music will differ from vs mode. This behavior is not supported by jukebox. Additionally, the following 1P mode songs will not play:_
-	<ul>
-		<li>Classic "Stage Clear" Jingle</li>
-		<li>Classic "Continue?" and "Game Over" Jingles</li>
-		<li>Credits music</li>
-		<li>Post-credits congratulations fmv music</li>
-	</ul>
+The Slippi EXI Device will forward these messages to the Rust EXI device which may or may not be holding an instance of Jukebox (depending on if the player has music enabled or not.)
 
-## How it works
+## How music is played back
 
-When a `Jukebox` instance is created (generally from an EXI Device), it reads the file system table contained in the iso to find music files and stores their locations + file sizes in a hashmap.
+When a `Jukebox` instance is created it will spawn a child thread which loops waiting to receive messages from the main thread. When a message to play a song is received, it reads from disk (completely independent of Dolphin) to load music data from the iso, [decodes it into audio](#decoding-melees-music) and plays it back with with the default audio device.
 
-Two child threads are immediately spawned: `JukeboxMessageDispatcher` and `JukeboxMusicPlayer`. Together these threads form an event loop.
-
-The message dispatcher continuously reads from dolphin's game memory and dispatches relevant events. The music player thread listens to the events and handles them by decoding the appropriate music files and playing them with the default audio device.
-
-When the `Jukebox` instance is dropped, the child threads are instructed to terminate, the event loop breaks, and the music stops.
+When the `Jukebox` instance is dropped, the child thread terminates and the music stops.
 
 ## Decoding Melee's Music
 
