@@ -76,4 +76,16 @@ impl SlippiEXIDevice {
             jukebox.set_melee_music_volume(volume);
         }
     }
+
+    pub fn jukebox_set_dolphin_system_volume(&mut self, volume: u8) {
+        if let Some(jukebox) = self.jukebox.as_mut() {
+            jukebox.set_dolphin_system_volume(volume);
+        }
+    }
+
+    pub fn jukebox_set_dolphin_music_volume(&mut self, volume: u8) {
+        if let Some(jukebox) = self.jukebox.as_mut() {
+            jukebox.set_dolphin_music_volume(volume);
+        }
+    }
 }

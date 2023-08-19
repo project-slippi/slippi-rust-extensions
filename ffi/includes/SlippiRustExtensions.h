@@ -96,6 +96,14 @@ void slprs_exi_device_jukebox_stop_music(uintptr_t exi_device_instance_ptr);
 void slprs_exi_device_jukebox_set_melee_music_volume(uintptr_t exi_device_instance_ptr,
                                                      uint8_t volume);
 
+/// Calls through to `Jukebox::set_dolphin_system_volume`.
+void slprs_exi_device_jukebox_set_dolphin_system_volume(uintptr_t exi_device_instance_ptr,
+                                                        uint8_t volume);
+
+/// Calls through to `Jukebox::set_dolphin_music_volume`.
+void slprs_exi_device_jukebox_set_dolphin_music_volume(uintptr_t exi_device_instance_ptr,
+                                                       uint8_t volume);
+
 /// Creates a new Player Report and leaks it, returning the pointer.
 ///
 /// This should be passed on to a GameReport for processing.
