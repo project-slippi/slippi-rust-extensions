@@ -40,13 +40,13 @@ impl SlippiEXIDevice {
     pub fn dma_read(&mut self, _address: usize, _size: usize) {}
 
     /// Configures a new Jukebox, or ensures an existing one is dropped if it's being disabled.
-    pub fn configure_jukebox(&mut self, is_enabled: bool) {
+    pub fn configure_jukebox(&mut self, is_enabled: bool, dolphin_system_volume: u8, dolphin_music_volume: u8) {
         if !is_enabled {
             self.jukebox = None;
             return;
         }
 
-        match Jukebox::new(self.iso_path.clone(), 1.0, 1.0) {
+        match Jukebox::new(self.iso_path.clone(), dolphin_system_volume, dolphin_music_volume) {
             Ok(jukebox) => {
                 self.jukebox = Some(jukebox);
             },

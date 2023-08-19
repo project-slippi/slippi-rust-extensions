@@ -191,13 +191,18 @@ pub extern "C" fn slprs_exi_device_reporter_push_replay_data(instance_ptr: usize
 /// in order for certain pieces of Dolphin to be properly initalized; this may change down
 /// the road though and is not set in stone.
 #[no_mangle]
-pub extern "C" fn slprs_exi_device_configure_jukebox(exi_device_instance_ptr: usize, is_enabled: bool) {
+pub extern "C" fn slprs_exi_device_configure_jukebox(
+    exi_device_instance_ptr: usize,
+    is_enabled: bool,
+    dolphin_system_volume: u8,
+    dolphin_music_volume: u8,
+) {
     // Coerce the instance from the pointer. This is theoretically safe since we control
     // the C++ side and can guarantee that the `exi_device_instance_ptr` is only owned
     // by the C++ EXI device, and is created/destroyed with the corresponding lifetimes.
     let mut device = unsafe { Box::from_raw(exi_device_instance_ptr as *mut SlippiEXIDevice) };
 
-    device.configure_jukebox(is_enabled);
+    device.configure_jukebox(is_enabled, dolphin_system_volume, dolphin_music_volume);
 
     // Fall back into a raw pointer so Rust doesn't obliterate the object.
     let _leak = Box::into_raw(device);

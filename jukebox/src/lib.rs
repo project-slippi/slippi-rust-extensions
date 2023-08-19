@@ -44,7 +44,7 @@ pub struct Jukebox {
 impl Jukebox {
     /// Returns an instance of Slippi Jukebox. Playback can be controlled by
     /// calling the instance's public methods.
-    pub fn new(iso_path: String, dolphin_system_volume: f32, dolphin_music_volume: f32) -> Result<Self> {
+    pub fn new(iso_path: String, dolphin_system_volume: u8, dolphin_music_volume: u8) -> Result<Self> {
         tracing::info!(target: Log::Jukebox, "Initializing Slippi Jukebox");
 
         // Make sure the provided ISO is supported
@@ -81,7 +81,12 @@ impl Jukebox {
     /// This can be thought of as jukebox's "main" function.
     /// It runs in it's own thread on a loop, awaiting messages from the main
     /// thread. The message handlers control music playback.
-    fn start(rx: Receiver<Message>, iso_path: String, dolphin_system_volume: f32, dolphin_music_volume: f32) -> Result<()> {
+    fn start(
+        rx: Receiver<Message>,
+        iso_path: String,
+        initial_dolphin_system_volume: u8,
+        initial_dolphin_music_volume: u8,
+    ) -> Result<()> {
         let (_stream, stream_handle) = OutputStream::try_default()?;
         let sink = Sink::try_new(&stream_handle)?;
 
@@ -89,8 +94,8 @@ impl Jukebox {
 
         let mut volume = Volume {
             melee_music: 1.0,
-            dolphin_system: dolphin_system_volume,
-            dolphin_music: dolphin_music_volume,
+            dolphin_system: (initial_dolphin_system_volume as f32 / 100.0).clamp(0.0, 1.0),
+            dolphin_music: (initial_dolphin_music_volume as f32 / 100.0).clamp(0.0, 1.0),
         };
 
         let set_sink_volume =
