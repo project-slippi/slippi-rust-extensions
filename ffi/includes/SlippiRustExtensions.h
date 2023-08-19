@@ -17,7 +17,16 @@ enum SlippiMatchmakingOnlinePlayMode {
   Teams = 3,
 };
 
+/// Fuck.
+struct EXIDeviceConfig {
+  const char *iso_path;
+  const char *user_folder_path;
+  void (*osd_add_msg_fn)(const char*, uint32_t, uint32_t);
+};
+
 extern "C" {
+
+uintptr_t slprs_lol(EXIDeviceConfig _config);
 
 /// Creates and leaks a shadow EXI device.
 ///
@@ -27,6 +36,7 @@ extern "C" {
 ///
 /// The returned pointer from this should *not* be used after calling `slprs_exi_device_destroy`.
 uintptr_t slprs_exi_device_create(const char *iso_path,
+                                  const char *user_folder_path,
                                   void (*osd_add_msg_fn)(const char*, uint32_t, uint32_t));
 
 /// The C++ (Dolphin) side of things should call this to notify the Rust side that it
@@ -62,17 +72,12 @@ void slprs_exi_device_start_new_reporter_session(uintptr_t instance_ptr);
 /// Calls through to the `SlippiGameReporter` on the EXI device to report a
 /// match completion event.
 void slprs_exi_device_report_match_completion(uintptr_t instance_ptr,
-                                              const char *uid,
-                                              const char *play_key,
                                               const char *match_id,
                                               uint8_t end_mode);
 
 /// Calls through to the `SlippiGameReporter` on the EXI device to report a
 /// match abandon event.
-void slprs_exi_device_report_match_abandonment(uintptr_t instance_ptr,
-                                               const char *uid,
-                                               const char *play_key,
-                                               const char *match_id);
+void slprs_exi_device_report_match_abandonment(uintptr_t instance_ptr, const char *match_id);
 
 /// Calls through to `SlippiGameReporter::push_replay_data`.
 void slprs_exi_device_reporter_push_replay_data(uintptr_t instance_ptr,

@@ -18,4 +18,5 @@ mainline = []
 dolphin-integrations = { path = "../dolphin" }
 slippi-game-reporter = { path = "../game-reporter" }
 slippi-jukebox = { path = "../jukebox" }
+slippi-user = { path = "../user" }
 tracing = { workspace = true }

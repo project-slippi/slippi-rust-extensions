@@ -6,6 +6,7 @@ use std::sync::mpsc::{self, Sender};
 use std::thread;
 
 use dolphin_integrations::Log;
+use slippi_user::UserManager;
 
 mod iso_md5_hasher;
 
@@ -44,6 +45,7 @@ pub(crate) enum CompletionEvent {
 /// it of new reports to process.
 #[derive(Debug)]
 pub struct SlippiGameReporter {
+    user_manager: UserManager,
     iso_md5_hasher_thread: Option<thread::JoinHandle<()>>,
     queue_thread: Option<thread::JoinHandle<()>>,
     queue_thread_notifier: Sender<ProcessingEvent>,
@@ -62,7 +64,7 @@ impl SlippiGameReporter {
     ///
     /// Currently, failure to spawn any thread should result in a crash - i.e, if we can't
     /// spawn an OS thread, then there are probably far bigger issues at work here.
-    pub fn new(iso_path: String) -> Self {
+    pub fn new(user_manager: UserManager, iso_path: String) -> Self {
         let queue = GameReporterQueue::new();
 
         // This is a thread-safe "one time" setter that the MD5 hasher thread
@@ -97,6 +99,7 @@ impl SlippiGameReporter {
             .expect("Failed to spawn SlippiGameReporterCompletionProcessingThread.");
 
         Self {
+            user_manager,
             queue,
             replay_data: Vec::new(),
             queue_thread_notifier: queue_sender,
@@ -137,8 +140,21 @@ impl SlippiGameReporter {
         }
     }
 
+    /// Reports a match abandon event.
+    pub fn report_abandonment(&self, match_id: String) {
+        let (uid, play_key) = self.user_manager.get(|user| {
+            (user.uid.clone(), user.play_key.clone())
+        });
+
+        self.queue.report_abandonment(uid, play_key, match_id);
+    }
+
     /// Dispatches a completion report to a background processing thread.
-    pub fn report_completion(&self, uid: String, play_key: String, match_id: String, end_mode: u8) {
+    pub fn report_completion(&self, match_id: String, end_mode: u8) {
+        let (uid, play_key) = self.user_manager.get(|user| {
+            (user.uid.clone(), user.play_key.clone())
+        });
+
         let event = CompletionEvent::ReportAvailable {
             uid,
             play_key,

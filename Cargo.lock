@@ -1183,6 +1183,7 @@ dependencies = [
  "dolphin-integrations",
  "slippi-game-reporter",
  "slippi-jukebox",
+ "slippi-user",
  "tracing",
 ]
 
@@ -1196,6 +1197,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_repr",
+ "slippi-user",
  "tracing",
  "ureq",
 ]
@@ -1212,6 +1214,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "slippi-rust-extensions"
+version = "0.1.0"
+dependencies = [
+ "cbindgen",
+ "dolphin-integrations",
+ "slippi-exi-device",
+ "slippi-game-reporter",
+ "slippi-user",
+ "tracing",
+]
+
+[[package]]
 name = "slippi-user"
 version = "0.1.0"
 dependencies = [
@@ -1221,18 +1235,6 @@ dependencies = [
  "serde_json",
  "tracing",
  "ureq",
-]
-
-[[package]]
-name = "slippi_rust_extensions"
-version = "0.1.0"
-dependencies = [
- "cbindgen",
- "dolphin-integrations",
- "slippi-exi-device",
- "slippi-game-reporter",
- "slippi-user",
- "tracing",
 ]
 
 [[package]]

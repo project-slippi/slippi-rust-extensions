@@ -8,12 +8,14 @@
 use dolphin_integrations::Log;
 use slippi_game_reporter::SlippiGameReporter;
 use slippi_jukebox::Jukebox;
+use slippi_user::UserManager;
 
 /// An EXI Device subclass specific to managing and interacting with the game itself.
 #[derive(Debug)]
 pub struct SlippiEXIDevice {
     iso_path: String,
     pub game_reporter: SlippiGameReporter,
+    pub user_manager: UserManager,
     jukebox: Option<Jukebox>,
 }
 
@@ -21,14 +23,25 @@ impl SlippiEXIDevice {
     /// Creates and returns a new `SlippiEXIDevice` with default values.
     ///
     /// At the moment you should never need to call this yourself.
-    pub fn new(iso_path: String) -> Self {
+    pub fn new(iso_path: String, user_folder_path: String) -> Self {
         tracing::info!(target: Log::EXI, "Starting SlippiEXIDevice");
 
-        let game_reporter = SlippiGameReporter::new(iso_path.clone());
+        let user_manager = UserManager::new(user_folder_path.into());
+
+        let game_reporter = SlippiGameReporter::new(
+            user_manager.clone(),
+            iso_path.clone()
+        );
+
+        // Playback has no need to deal with this.
+        // (We could maybe silo more?)
+        #[cfg(not(feature = "playback"))]
+        user_manager.watch_for_login();
 
         Self {
             iso_path,
             game_reporter,
+            user_manager,
             jukebox: None,
         }
     }

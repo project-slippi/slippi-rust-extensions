@@ -6,6 +6,22 @@ use slippi_game_reporter::GameReport;
 
 use crate::c_str_to_string;
 
+/// Fuck.
+#[repr(C)]
+pub struct EXIDeviceConfig {
+    iso_path: *const c_char,
+    user_folder_path: *const c_char,
+    osd_add_msg_fn: unsafe extern "C" fn(*const c_char, u32, u32)
+}
+
+#[no_mangle]
+pub extern "C" fn slprs_lol(
+    _config: EXIDeviceConfig
+) -> usize {
+    0
+}
+
+
 /// Creates and leaks a shadow EXI device.
 ///
 /// The C++ (Dolphin) side of things should call this and pass the appropriate arguments. At
@@ -16,15 +32,17 @@ use crate::c_str_to_string;
 #[no_mangle]
 pub extern "C" fn slprs_exi_device_create(
     iso_path: *const c_char,
+    user_folder_path: *const c_char,
     osd_add_msg_fn: unsafe extern "C" fn(*const c_char, u32, u32),
 ) -> usize {
     let fn_name = "slprs_exi_device_create";
 
     let iso_path = c_str_to_string(iso_path, fn_name, "iso_path");
+    let user_folder_path = c_str_to_string(user_folder_path, fn_name, "user_folder_path");
 
     dolphin_integrations::ffi::osd::set_global_hook(osd_add_msg_fn);
 
-    let exi_device = Box::new(SlippiEXIDevice::new(iso_path));
+    let exi_device = Box::new(SlippiEXIDevice::new(iso_path, user_folder_path));
     let exi_device_instance_ptr = Box::into_raw(exi_device) as usize;
 
     tracing::warn!(target: Log::EXI, ptr = exi_device_instance_ptr, "Creating Device");
@@ -123,8 +141,6 @@ pub extern "C" fn slprs_exi_device_start_new_reporter_session(instance_ptr: usiz
 #[no_mangle]
 pub extern "C" fn slprs_exi_device_report_match_completion(
     instance_ptr: usize,
-    uid: *const c_char,
-    play_key: *const c_char,
     match_id: *const c_char,
     end_mode: u8,
 ) {
@@ -134,11 +150,9 @@ pub extern "C" fn slprs_exi_device_report_match_completion(
     let device = unsafe { Box::from_raw(instance_ptr as *mut SlippiEXIDevice) };
 
     let fn_name = "slprs_exi_device_report_match_completion";
-    let uid = c_str_to_string(uid, fn_name, "uid");
-    let play_key = c_str_to_string(play_key, fn_name, "play_key");
     let match_id = c_str_to_string(match_id, fn_name, "match_id");
 
-    device.game_reporter.report_completion(uid, play_key, match_id, end_mode);
+    device.game_reporter.report_completion(match_id, end_mode);
 
     // Fall back into a raw pointer so Rust doesn't obliterate the object.
     let _leak = Box::into_raw(device);
@@ -149,8 +163,6 @@ pub extern "C" fn slprs_exi_device_report_match_completion(
 #[no_mangle]
 pub extern "C" fn slprs_exi_device_report_match_abandonment(
     instance_ptr: usize,
-    uid: *const c_char,
-    play_key: *const c_char,
     match_id: *const c_char,
 ) {
     // Coerce the instances from the pointers. This is theoretically safe since we control
@@ -159,11 +171,9 @@ pub extern "C" fn slprs_exi_device_report_match_abandonment(
     let device = unsafe { Box::from_raw(instance_ptr as *mut SlippiEXIDevice) };
 
     let fn_name = "slprs_exi_device_report_match_abandonment";
-    let uid = c_str_to_string(uid, fn_name, "uid");
-    let play_key = c_str_to_string(play_key, fn_name, "play_key");
     let match_id = c_str_to_string(match_id, fn_name, "match_id");
 
-    device.game_reporter.report_abandonment(uid, play_key, match_id);
+    device.game_reporter.report_abandonment(match_id);
 
     // Fall back into a raw pointer so Rust doesn't obliterate the object.
     let _leak = Box::into_raw(device);

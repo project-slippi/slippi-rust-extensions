@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -12,17 +12,11 @@ use std::time::Duration;
 mod chat;
 pub use chat::DEFAULT_CHAT_MESSAGES;
 
-mod utils;
-use utils::ThreadSafeWrapper;
-
 const USER_API_URL: &'static str = "https://users-rest-dot-slippi.uc.r.appspot.com/user";
-
-/// A type alias for how we hold `UserInfo` to share across threads.
-type User = ThreadSafeWrapper<Option<UserInfo>>;
 
 /// The core payload that represents user information. This type is expected to conform
 /// to the same definition that the remote server uses.
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Default, serde::Deserialize)]
 pub struct UserInfo {
     pub uid: String,
 
@@ -40,7 +34,7 @@ pub struct UserInfo {
 
     pub port: Option<i64>,
 
-    #[serde(alias = "chatMessages", default = "chat::default")]
+    #[serde(alias = "chatMessages")]
     pub chat_messages: Vec<String>,
 }
 
@@ -55,36 +49,148 @@ impl UserInfo {
     }
 }
 
-/// This type manages access to user information, as well as any background thread watching
-/// for `user.json` file existence.
-#[derive(Debug)]
-pub struct SlippiUserManager {
-    user: User,
+/// A thread-safe handle for the User Manager. This uses an `Arc` under the hood, so you don't
+/// need to do so if you're storing it.
+///
+/// In the future, this type could probably switch to `Rc<RefCell<>>` instead of `Arc<Mutex<>>`,
+/// but we should get further along in the port before doing so to avoid any ill assumptions about
+/// where this stuff is called into from the C++ side.
+#[derive(Clone, Debug)]
+pub struct UserManager {
+    user: Arc<Mutex<UserInfo>>,
     user_json_path: Arc<PathBuf>,
-    should_listen_for_auth: Arc<AtomicBool>,
-    user_file_listener_thread: Option<thread::JoinHandle<()>>,
+    watcher: Arc<Mutex<UserInfoWatcher>>
 }
 
-impl SlippiUserManager {
-    /// Creates and returns a new `SlippiUserManager` instance.
+impl UserManager {
+    /// Creates and returns a new `UserManager` instance.
     ///
     /// This accepts a `PathBuf` specifying the folder where user files (e.g, `user.json`)
     /// live. This is an OS-specific value and we currently need to share it with Dolphin,
     /// so this should be passed via the FFI layer. In the future, we may be able to remove
     /// this restriction via some assumptions.
     pub fn new(user_folder_path: PathBuf) -> Self {
+        let user = Arc::new(Mutex::new(UserInfo::default()));
+        let user_json_path = Arc::new(user_folder_path.join("user.json"));
+        let watcher = Arc::new(Mutex::new(UserInfoWatcher::new()));
+
+        Self { user, user_json_path, watcher }
+    }
+
+    /// User info is held behind a Mutex as we access it from multiple threads. To read data
+    /// from the user info, you can pass a closure to this method to extract whatever you need. If
+    /// the user is not authenticated, then the underlying user is `None` and the closure will
+    /// receive that as an argument.
+    ///
+    /// This is slightly better ergonomics wise than dealing with locking all over the place, and
+    /// allows batch retrieval of properties.
+    ///
+    /// If, in the rare event that a Mutex lock could not be acquired (which should... never
+    /// happen), this will call the provided closure with `&None` while logging the error.
+    ///
+    /// ```no_run
+    /// use slippi_user::UserManager;
+    ///
+    /// fn inspect(manager: UserManager) {
+    ///     let uid = manager.get(|user| user.uid);
+    ///     println!("User ID: {}", uid);
+    /// }
+    /// ```
+    pub fn get<F, R>(&self, handler: F) -> R
+    where
+        F: FnOnce(&UserInfo) -> R,
+    {
+        let lock = self.user.lock()
+            .expect("Unable to acquire user getter lock");
+
+        handler(&lock)
+    }
+
+    /// As user info is held behind a Mutex, we need to lock it to alter data on it. This is
+    /// a simple helper method for automating that - and as a bonus, it's easier to batch-set
+    /// properties without locking multiple times.
+    ///
+    /// ```no_run
+    /// use slippi_user::UserManager;
+    ///
+    /// fn update(manager: UserManager, uid: String) {
+    ///     manager.set(move |user| {
+    ///         user.uid = uid;
+    ///     })
+    /// }
+    /// ```
+    fn set<F>(&self, handler: F)
+    where
+        F: FnOnce(&mut UserInfo),
+    {
+        let mut lock = self.user.lock()
+            .expect("Unable to acquire user setter lock");
+
+        handler(&mut lock);
+    }
+
+    /// Kicks off a background handler for processing user authentication.
+    pub fn watch_for_login(&self) {
+        let mut watcher = self.watcher.lock()
+            .expect("Unable to acquire user watcher lock");
+
+        watcher.watch_for_login(self.user_json_path.clone(), self.user.clone());
+    }
+    
+    /// Returns whether we have an authenticated user - i.e, whether we were able
+    /// to find/load/parse their `user.json` file.
+    pub fn is_logged_in(&self) -> bool {
+        self.get(|user| user.uid != "")
+    }
+
+    /// During matchmaking, we may opt to force-overwrite the latest version to
+    /// account for errors that can happen when the user tries to update.
+    pub fn overwrite_latest_version(&mut self, version: String) {
+        self.set(|user| {
+            user.latest_version = version;
+        });
+    }
+    
+    /// Logs the current user out and removes their `user.json` from the filesystem.
+    pub fn logout(&mut self) {
+        self.set(|user| *user = UserInfo::default());
+
+        if let Err(error) = std::fs::remove_file(self.user_json_path.as_path()) {
+            tracing::error!(?error, "Failed to remove user.json on logout");
+        }
+
+        let mut watcher = self.watcher.lock()
+            .expect("Unable to acquire watcher lock on user logout");
+
+        watcher.logout();
+    }
+}
+
+/// This type manages access to user information, as well as any background thread watching
+/// for `user.json` file existence.
+#[derive(Debug)]
+pub struct UserInfoWatcher {
+    should_watch: Arc<AtomicBool>,
+    watcher_thread: Option<thread::JoinHandle<()>>,
+}
+
+impl UserInfoWatcher {
+    /// Initializes a new `UserInfoWatcher`. Call `watch_for_login` to kick things off.
+    pub fn new() -> Self {
         Self {
-            user: User::new("user", None),
-            user_json_path: Arc::new(user_folder_path.join("user.json")),
-            should_listen_for_auth: Arc::new(AtomicBool::new(false)),
-            user_file_listener_thread: None,
+            should_watch: Arc::new(AtomicBool::new(false)),
+            watcher_thread: None,
         }
     }
 
     /// Spins up (or re-spins-up) the background watcher thread for the `user.json` file.
-    pub fn listen_for_login(&mut self) {
-        // If we're already listening, no-op out.
-        if self.should_listen_for_auth.load(Ordering::Relaxed) {
+    pub fn watch_for_login(
+        &mut self,
+        user_json_path: Arc<PathBuf>,
+        user: Arc<Mutex<UserInfo>>
+    ) {
+        // If we're already watching, no-op out.
+        if self.should_watch.load(Ordering::Relaxed) {
             return;
         }
 
@@ -92,16 +198,13 @@ impl SlippiUserManager {
         self.release_thread();
 
         // Start the new thread~
-        let should_listen_for_auth = self.should_listen_for_auth.clone();
-        should_listen_for_auth.store(true, Ordering::Relaxed);
+        let should_watch = self.should_watch.clone();
+        should_watch.store(true, Ordering::Relaxed);
 
-        let user = self.user.clone();
-        let user_json_path = self.user_json_path.clone();
-
-        let user_file_listener_thread = thread::Builder::new()
+        let watcher_thread = thread::Builder::new()
             .name("SlippiUserJSONWatcherThread".into())
             .spawn(move || loop {
-                if !should_listen_for_auth.load(Ordering::Relaxed) {
+                if !should_watch.load(Ordering::Relaxed) {
                     return;
                 }
 
@@ -113,46 +216,26 @@ impl SlippiUserManager {
             })
             .expect("Failed to spawn SlippiUserJSONWatcherThread");
 
-        self.user_file_listener_thread = Some(user_file_listener_thread);
+        self.watcher_thread = Some(watcher_thread);
     }
 
-    /// During matchmaking, we may opt to force-overwrite the latest version to
-    /// account for errors that can happen when the user tries to update.
-    pub fn overwrite_latest_version(&mut self, version: String) {
-        self.user.with_mut(|user| {
-            if let Some(user) = user {
-                user.latest_version = version;
-            }
-        });
-    }
-
-    /// Returns whether we have an authenticated user - i.e, whether we were able
-    /// to find/load/parse their `user.json` file.
-    pub fn is_logged_in(&self) -> bool {
-        self.user.get(|user| user.is_some()).is_some()
-    }
-
-    /// Logs the current user out and removes their `user.json` from the filesystem.
-    pub fn logout(&mut self) {
-        self.should_listen_for_auth.store(false, Ordering::Relaxed);
-        self.user.set(None);
-
-        if let Err(error) = std::fs::remove_file(self.user_json_path.as_path()) {
-            tracing::error!(?error, "Failed to remove user.json on logout");
-        }
+    /// On logout, we just need to stop the watcher thread. The thread will get
+    /// restarted via some conditions elsewhere.
+    fn logout(&mut self) {
+        self.should_watch.store(false, Ordering::Relaxed);
     }
 
     /// Standard logic for popping the thread handle and joining it, logging on failure.
     fn release_thread(&mut self) {
-        if let Some(user_file_listener_thread) = self.user_file_listener_thread.take() {
-            if let Err(error) = user_file_listener_thread.join() {
+        if let Some(watcher_thread) = self.watcher_thread.take() {
+            if let Err(error) = watcher_thread.join() {
                 tracing::error!(?error, "user.json background thread join failure");
             }
         }
     }
 }
 
-impl Drop for SlippiUserManager {
+impl Drop for UserInfoWatcher {
     /// Cleans up the background thread that we use for watching `user.json` status.
     fn drop(&mut self) {
         self.release_thread();
@@ -162,15 +245,20 @@ impl Drop for SlippiUserManager {
 /// Checks for the existence of a `user.json` file and, if found, attempts to load and parse it.
 ///
 /// This returns a `bool` value so that the background thread can know whether to stop checking.
-fn attempt_login(user: &User, user_json_path: &PathBuf) -> bool {
+fn attempt_login(user: &Arc<Mutex<UserInfo>>, user_json_path: &PathBuf) -> bool {
     match std::fs::read_to_string(user_json_path) {
         Ok(contents) => match serde_json::from_str::<UserInfo>(&contents) {
             Ok(mut info) => {
                 info.sanitize();
 
                 let uid = info.uid.clone();
+                {
+                    let mut lock = user.lock()
+                        .expect("Unable to lock user in attempt_login");
 
-                user.set(Some(info));
+                    *lock = info;
+                }
+
                 overwrite_from_server(user, uid);
                 return true;
             },
@@ -205,7 +293,7 @@ pub fn update_app() -> bool {
 
 /// Calls out to the Slippi server and fetches the user info, patching up the user info object
 /// with any returned information.
-fn overwrite_from_server(user: &User, uid: String) {
+fn overwrite_from_server(user: &Arc<Mutex<UserInfo>>, uid: String) {
     let is_beta = "";
 
     let url = format!("{USER_API_URL}{is_beta}/{uid}?additionalFields=chatMessages");
@@ -225,7 +313,11 @@ fn overwrite_from_server(user: &User, uid: String) {
             Ok(body) => match serde_json::from_str::<UserInfo>(&body) {
                 Ok(mut info) => {
                     info.sanitize();
-                    user.set(Some(info));
+                    
+                    let mut lock = user.lock()
+                        .expect("Unable to lock user in attempt_login");
+
+                    *lock = info;
                 },
 
                 Err(error) => {
