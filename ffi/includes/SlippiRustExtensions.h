@@ -84,8 +84,8 @@ void slprs_exi_device_reporter_push_replay_data(uintptr_t instance_ptr,
 /// the road though and is not set in stone.
 void slprs_exi_device_configure_jukebox(uintptr_t exi_device_instance_ptr,
                                         bool is_enabled,
-                                        uint8_t dolphin_system_volume,
-                                        uint8_t dolphin_music_volume);
+                                        uint8_t initial_dolphin_system_volume,
+                                        uint8_t initial_dolphin_music_volume);
 
 /// Creates a new Player Report and leaks it, returning the pointer.
 ///

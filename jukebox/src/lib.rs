@@ -44,7 +44,7 @@ pub struct Jukebox {
 impl Jukebox {
     /// Returns an instance of Slippi Jukebox. Playback can be controlled by
     /// calling the instance's public methods.
-    pub fn new(iso_path: String, dolphin_system_volume: u8, dolphin_music_volume: u8) -> Result<Self> {
+    pub fn new(iso_path: String, initial_dolphin_system_volume: u8, initial_dolphin_music_volume: u8) -> Result<Self> {
         tracing::info!(target: Log::Jukebox, "Initializing Slippi Jukebox");
 
         // Make sure the provided ISO is supported
@@ -65,7 +65,7 @@ impl Jukebox {
         std::thread::Builder::new()
             .name("SlippiJukebox".to_string())
             .spawn(move || {
-                if let Err(e) = Self::start(rx, iso_path, dolphin_system_volume, dolphin_music_volume) {
+                if let Err(e) = Self::start(rx, iso_path, initial_dolphin_system_volume, initial_dolphin_music_volume) {
                     tracing::error!(
                         target: Log::Jukebox,
                         error = ?e,

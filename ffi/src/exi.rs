@@ -194,8 +194,8 @@ pub extern "C" fn slprs_exi_device_reporter_push_replay_data(instance_ptr: usize
 pub extern "C" fn slprs_exi_device_configure_jukebox(
     exi_device_instance_ptr: usize,
     is_enabled: bool,
-    dolphin_system_volume: u8,
-    dolphin_music_volume: u8,
+    initial_dolphin_system_volume: u8,
+    initial_dolphin_music_volume: u8,
 ) {
     // Coerce the instance from the pointer. This is theoretically safe since we control
     // the C++ side and can guarantee that the `exi_device_instance_ptr` is only owned
@@ -204,8 +204,8 @@ pub extern "C" fn slprs_exi_device_configure_jukebox(
 
     let jukebox_config = match is_enabled {
         true => JukeboxConfiguration::Start {
-            dolphin_system_volume,
-            dolphin_music_volume,
+            initial_dolphin_system_volume,
+            initial_dolphin_music_volume,
         },
         false => JukeboxConfiguration::Stop,
     };

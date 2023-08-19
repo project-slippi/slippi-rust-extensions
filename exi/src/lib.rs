@@ -19,8 +19,8 @@ pub struct SlippiEXIDevice {
 
 pub enum JukeboxConfiguration {
     Start {
-        dolphin_system_volume: u8,
-        dolphin_music_volume: u8,
+        initial_dolphin_system_volume: u8,
+        initial_dolphin_music_volume: u8,
     },
     Stop,
 }
@@ -60,11 +60,11 @@ impl SlippiEXIDevice {
         }
 
         if let JukeboxConfiguration::Start {
-            dolphin_system_volume,
-            dolphin_music_volume,
+            initial_dolphin_system_volume,
+            initial_dolphin_music_volume,
         } = config
         {
-            match Jukebox::new(self.iso_path.clone(), dolphin_system_volume, dolphin_music_volume) {
+            match Jukebox::new(self.iso_path.clone(), initial_dolphin_system_volume, initial_dolphin_music_volume) {
                 Ok(jukebox) => {
                     self.jukebox = Some(jukebox);
                 },
