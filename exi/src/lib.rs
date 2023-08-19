@@ -54,6 +54,11 @@ impl SlippiEXIDevice {
             return;
         }
 
+        if self.jukebox.is_some() {
+            tracing::info!(target: Log::EXI, "Jukebox is already active");
+            return;
+        }
+
         if let JukeboxConfiguration::Start {
             dolphin_system_volume,
             dolphin_music_volume,

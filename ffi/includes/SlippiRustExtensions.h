@@ -121,6 +121,23 @@ uintptr_t slprs_game_report_create(const char *uid,
 void slprs_game_report_add_player_report(uintptr_t instance_ptr,
                                          uintptr_t player_report_instance_ptr);
 
+/// Calls through to `Jukebox::start_song`.
+void slprs_jukebox_start_song(uintptr_t exi_device_instance_ptr,
+                              uint64_t hps_offset,
+                              uintptr_t hps_length);
+
+/// Calls through to `Jukebox::stop_music`.
+void slprs_jukebox_stop_music(uintptr_t exi_device_instance_ptr);
+
+/// Calls through to `Jukebox::set_melee_music_volume`.
+void slprs_jukebox_set_melee_music_volume(uintptr_t exi_device_instance_ptr, uint8_t volume);
+
+/// Calls through to `Jukebox::set_dolphin_system_volume`.
+void slprs_jukebox_set_dolphin_system_volume(uintptr_t exi_device_instance_ptr, uint8_t volume);
+
+/// Calls through to `Jukebox::set_dolphin_music_volume`.
+void slprs_jukebox_set_dolphin_music_volume(uintptr_t exi_device_instance_ptr, uint8_t volume);
+
 /// This should be called from the Dolphin LogManager initialization to ensure that
 /// all logging needs on the Rust side are configured appropriately.
 ///
@@ -151,22 +168,5 @@ void slprs_logging_update_container(const char *kind, bool enabled, int level);
 ///
 /// For more information, see `dolphin_logger::update_container`.
 void slprs_mainline_logging_update_log_level(int level);
-
-/// Calls through to `Jukebox::start_song`.
-void slprs_jukebox_start_song(uintptr_t exi_device_instance_ptr,
-                              uint64_t hps_offset,
-                              uintptr_t hps_length);
-
-/// Calls through to `Jukebox::stop_music`.
-void slprs_jukebox_stop_music(uintptr_t exi_device_instance_ptr);
-
-/// Calls through to `Jukebox::set_melee_music_volume`.
-void slprs_jukebox_set_melee_music_volume(uintptr_t exi_device_instance_ptr, uint8_t volume);
-
-/// Calls through to `Jukebox::set_dolphin_system_volume`.
-void slprs_jukebox_set_dolphin_system_volume(uintptr_t exi_device_instance_ptr, uint8_t volume);
-
-/// Calls through to `Jukebox::set_dolphin_music_volume`.
-void slprs_jukebox_set_dolphin_music_volume(uintptr_t exi_device_instance_ptr, uint8_t volume);
 
 } // extern "C"
