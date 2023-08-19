@@ -1,0 +1,19 @@
+[package]
+name = "slippi-config"
+description = "Handles Slippi configuration constants"
+version = "0.1.0"
+authors = [
+    "Slippi Team",
+    "Robert Peralta <rapito@gmail.com>"
+]
+edition = "2021"
+publish = false
+
+[features]
+default = []
+ishiiruka = []
+mainline = []
+
+[dependencies]
+serde = { workspace = true }
+serde_yaml = "0.9"

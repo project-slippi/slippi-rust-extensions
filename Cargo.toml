@@ -10,6 +10,7 @@ members = [
     "ffi",
     "game-reporter",
     "jukebox",
+    "config",
 ]
 
 # Ship the resulting dylib with debug information so we can figure out
