@@ -17,6 +17,7 @@ mod disc;
 use disc::{get_iso_kind, get_real_offset, IsoKind};
 
 mod utils;
+use utils::copy_bytes_from_file;
 
 pub(crate) type Result<T> = std::result::Result<T, JukeboxError>;
 
@@ -98,28 +99,51 @@ impl Jukebox {
         loop {
             match rx.recv()? {
                 StartSong(hps_offset, hps_length) => {
-                    let real_hps_offset =
-                        get_real_offset(&mut iso, hps_offset)?.ok_or(OffsetMissingFromCompressedIso(hps_offset))?;
+                    let real_hps_offset = match get_real_offset(&mut iso, hps_offset)? {
+                        Some(offset) => offset,
+                        None => {
+                            tracing::warn!(
+                                target: Log::Jukebox,
+                                "0x{hps_offset:0x?} has no corresponding offset in the ISO. Cannot play song."
+                            );
+                            continue;
+                        },
+                    };
 
-                    let hps: Hps = utils::copy_bytes_from_file(&mut iso, real_hps_offset, hps_length)?.try_into()?;
-                    let audio_source = HpsAudioSource(hps.into());
+                    let song: Hps = match copy_bytes_from_file(&mut iso, real_hps_offset, hps_length)?.try_into() {
+                        Ok(song) => song,
+                        Err(e) => {
+                            tracing::error!(
+                                target: Log::Jukebox,
+                                error = ?e,
+                                "Failed to decode the bytes at 0x{hps_offset:0x?} into an Hps. Cannot play song."
+                            );
+                            continue;
+                        },
+                    };
+
+                    let audio_source = HpsAudioSource(song.into());
 
                     sink.stop();
                     sink.append(audio_source);
                     sink.play();
                 },
+
                 SetMeleeMusicVolume(value) => {
                     volume.melee_music = (value as f32 / 254.0).clamp(0.0, 1.0);
                     set_sink_volume(&volume);
                 },
+
                 SetDolphinSystemVolume(value) => {
                     volume.dolphin_system = (value as f32 / 100.0).clamp(0.0, 1.0);
                     set_sink_volume(&volume);
                 },
+
                 SetDolphinMusicVolume(value) => {
                     volume.dolphin_music = (value as f32 / 100.0).clamp(0.0, 1.0);
                     set_sink_volume(&volume);
                 },
+
                 StopMusic => sink.stop(),
                 JukeboxDropped => return Ok(()),
             }
@@ -134,33 +158,33 @@ impl Jukebox {
             target: Log::Jukebox,
             "Start song. Offset: 0x{hps_offset:0x?}, Length: {hps_length}"
         );
-        self.tx.send(StartSong(hps_offset, hps_length)).ok();
+        let _ = self.tx.send(StartSong(hps_offset, hps_length));
     }
 
     /// Stops any currently playing music
     pub fn stop_music(&mut self) {
         tracing::info!(target: Log::Jukebox, "Stop music");
-        self.tx.send(StopMusic).ok();
+        let _ = self.tx.send(StopMusic);
     }
 
     /// Indicate to the jukebox instance that melee's in-game volume has changed
     pub fn set_melee_music_volume(&mut self, volume: u8) {
         tracing::info!(target: Log::Jukebox, "Change in-game music volume: {volume}");
-        self.tx.send(SetMeleeMusicVolume(volume)).ok();
+        let _ = self.tx.send(SetMeleeMusicVolume(volume));
     }
 
     /// Indicate to the jukebox instance that Dolphin's audio config volume has
     /// changed
     pub fn set_dolphin_system_volume(&mut self, volume: u8) {
         tracing::info!(target: Log::Jukebox, "Change dolphin audio config volume: {volume}");
-        self.tx.send(SetDolphinSystemVolume(volume)).ok();
+        let _ = self.tx.send(SetDolphinSystemVolume(volume));
     }
 
     /// Indicate to the jukebox instance that Dolphin's "Jukebox volume" slider
     /// value has changed
     pub fn set_dolphin_music_volume(&mut self, volume: u8) {
         tracing::info!(target: Log::Jukebox, "Change jukebox music volume: {volume}");
-        self.tx.send(SetDolphinMusicVolume(volume)).ok();
+        let _ = self.tx.send(SetDolphinMusicVolume(volume));
     }
 }
 

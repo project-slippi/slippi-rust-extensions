@@ -16,9 +16,6 @@ pub enum JukeboxError {
     #[error("The channel sender has disconnected, implying no further messages will be received.")]
     ChannelSenderDisconnected(#[from] std::sync::mpsc::RecvError),
 
-    #[error("The desired offset ({0}) doesn't exist in the compressed ISO")]
-    OffsetMissingFromCompressedIso(u64),
-
     #[error("Failed to decode music file: {0}")]
     MusicFileDecoding(#[from] hps_decode::hps::HpsParseError),
 

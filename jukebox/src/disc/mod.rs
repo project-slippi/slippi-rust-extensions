@@ -39,7 +39,8 @@ pub(crate) fn get_iso_kind(iso: &mut File) -> Result<IsoKind> {
 /// _actual_ offset for the file we have on hand. This can vary depending on the
 /// kind of disc image that we are dealing with (standard vs ciso, for example).
 ///
-/// This function can be used to locate the true offset.
+/// This function can be used to locate the true offset. If `None` is returned,
+/// then the desired offset maps to nothing in the provided ISO.
 pub(crate) fn get_real_offset(iso: &mut File, offset: u64) -> Result<Option<u64>> {
     // Get the ciso header (block size and block map) of the provided file.
     // If the file is not a ciso, this will be `None`
