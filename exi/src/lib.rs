@@ -14,7 +14,15 @@ use slippi_jukebox::Jukebox;
 pub struct SlippiEXIDevice {
     iso_path: String,
     pub game_reporter: SlippiGameReporter,
-    jukebox: Option<Jukebox>,
+    pub jukebox: Option<Jukebox>,
+}
+
+pub enum JukeboxConfiguration {
+    Start {
+        dolphin_system_volume: u8,
+        dolphin_music_volume: u8,
+    },
+    Stop,
 }
 
 impl SlippiEXIDevice {
@@ -40,52 +48,28 @@ impl SlippiEXIDevice {
     pub fn dma_read(&mut self, _address: usize, _size: usize) {}
 
     /// Configures a new Jukebox, or ensures an existing one is dropped if it's being disabled.
-    pub fn configure_jukebox(&mut self, is_enabled: bool, dolphin_system_volume: u8, dolphin_music_volume: u8) {
-        if !is_enabled {
+    pub fn configure_jukebox(&mut self, config: JukeboxConfiguration) {
+        if let JukeboxConfiguration::Stop = config {
             self.jukebox = None;
             return;
         }
 
-        match Jukebox::new(self.iso_path.clone(), dolphin_system_volume, dolphin_music_volume) {
-            Ok(jukebox) => {
-                self.jukebox = Some(jukebox);
-            },
+        if let JukeboxConfiguration::Start {
+            dolphin_system_volume,
+            dolphin_music_volume,
+        } = config
+        {
+            match Jukebox::new(self.iso_path.clone(), dolphin_system_volume, dolphin_music_volume) {
+                Ok(jukebox) => {
+                    self.jukebox = Some(jukebox);
+                },
 
-            Err(e) => tracing::error!(
-                target: Log::EXI,
-                error = ?e,
-                "Failed to start Jukebox"
-            ),
-        }
-    }
-
-    pub fn jukebox_start_song(&mut self, hps_offset: u64, hps_length: usize) {
-        if let Some(jukebox) = self.jukebox.as_mut() {
-            jukebox.start_song(hps_offset, hps_length);
-        }
-    }
-
-    pub fn jukebox_stop_music(&mut self) {
-        if let Some(jukebox) = self.jukebox.as_mut() {
-            jukebox.stop_music();
-        }
-    }
-
-    pub fn jukebox_set_melee_music_volume(&mut self, volume: u8) {
-        if let Some(jukebox) = self.jukebox.as_mut() {
-            jukebox.set_melee_music_volume(volume);
-        }
-    }
-
-    pub fn jukebox_set_dolphin_system_volume(&mut self, volume: u8) {
-        if let Some(jukebox) = self.jukebox.as_mut() {
-            jukebox.set_dolphin_system_volume(volume);
-        }
-    }
-
-    pub fn jukebox_set_dolphin_music_volume(&mut self, volume: u8) {
-        if let Some(jukebox) = self.jukebox.as_mut() {
-            jukebox.set_dolphin_music_volume(volume);
+                Err(e) => tracing::error!(
+                    target: Log::EXI,
+                    error = ?e,
+                    "Failed to start Jukebox"
+                ),
+            }
         }
     }
 }
