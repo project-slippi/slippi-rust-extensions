@@ -1,43 +1,52 @@
 use std::convert::TryInto;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 use std::fs::File;
+use std::sync::mpsc::{channel, Receiver, Sender};
 
 use dolphin_integrations::{Color, Dolphin, Duration as OSDDuration, Log};
 use hps_decode::{Hps, PcmIterator};
 use rodio::{OutputStream, Sink};
+
+use crate::Message::*;
 
 mod errors;
 pub use errors::JukeboxError;
 use JukeboxError::*;
 
 mod disc;
+use disc::{get_iso_kind, get_real_offset, IsoKind};
+
 mod utils;
+use utils::copy_bytes_from_file;
 
 pub(crate) type Result<T> = std::result::Result<T, JukeboxError>;
-
-/// Represents a foreign method from the Dolphin side for grabbing the current volume.
-/// Dolphin represents this as a number from 0 - 100; 0 being mute.
-pub type ForeignGetVolumeFn = unsafe extern "C" fn() -> std::ffi::c_int;
 
 /// By default Slippi Jukebox plays music slightly louder than vanilla melee
 /// does. This reduces the overall music volume output to 80%. Not totally sure
 /// if that's the correct amount, but it sounds about right.
 const VOLUME_REDUCTION_MULTIPLIER: f32 = 0.8;
 
+#[derive(Debug)]
+pub enum Message {
+    StartSong(u64, usize),
+    StopMusic,
+    SetVolume(VolumeControl, u8),
+    JukeboxDropped,
+}
+
+#[derive(Debug)]
 pub struct Jukebox {
-    iso_path: String,
-    _output_stream: OutputStream,
-    sink: Sink,
-    get_dolphin_volume_fn: ForeignGetVolumeFn,
+    tx: Sender<Message>,
 }
 
 impl Jukebox {
-    pub fn new(iso_path: String, get_dolphin_volume_fn: ForeignGetVolumeFn) -> Result<Self> {
-        let mut iso = File::open(&iso_path)?;
-        let iso_kind = disc::get_iso_kind(&mut iso)?;
+    /// Returns an instance of Slippi Jukebox. Playback can be controlled by
+    /// calling the instance's public methods.
+    pub fn new(iso_path: String, initial_dolphin_system_volume: u8, initial_dolphin_music_volume: u8) -> Result<Self> {
+        tracing::info!(target: Log::Jukebox, "Initializing Slippi Jukebox");
 
         // Make sure the provided ISO is supported
-        if let disc::IsoKind::Unknown = iso_kind {
+        if let IsoKind::Unknown = get_iso_kind(&mut File::open(&iso_path)?)? {
             Dolphin::add_osd_message(
                 Color::Red,
                 OSDDuration::VeryLong,
@@ -46,61 +55,139 @@ impl Jukebox {
             return Err(UnsupportedIso);
         }
 
-        // Get a handle to the default audio device
-        let (output_stream, stream_handle) = OutputStream::try_default()?;
+        // This channel allows the main thread to send messages to the
+        // SlippiJukebox player thread
+        let (tx, rx) = channel::<Message>();
+
+        // Spawn the thread that will handle loading music and playing it back
+        std::thread::Builder::new()
+            .name("SlippiJukebox".to_string())
+            .spawn(move || {
+                if let Err(e) = Self::start(rx, iso_path, initial_dolphin_system_volume, initial_dolphin_music_volume) {
+                    tracing::error!(
+                        target: Log::Jukebox,
+                        error = ?e,
+                        "SlippiJukebox thread encountered an error: {e}"
+                    );
+                }
+            })
+            .map_err(ThreadSpawn)?;
+
+        Ok(Self { tx })
+    }
+
+    /// This can be thought of as jukebox's "main" function.
+    /// It runs in it's own thread on a loop, awaiting messages from the main
+    /// thread. The message handlers control music playback.
+    fn start(
+        rx: Receiver<Message>,
+        iso_path: String,
+        initial_dolphin_system_volume: u8,
+        initial_dolphin_music_volume: u8,
+    ) -> Result<()> {
+        let (_stream, stream_handle) = OutputStream::try_default()?;
         let sink = Sink::try_new(&stream_handle)?;
 
-        tracing::info!(target: Log::Jukebox, "Slippi Jukebox Initialized");
+        let mut iso = File::open(&iso_path)?;
 
-        Ok(Self {
-            iso_path,
-            _output_stream: output_stream,
-            sink,
-            get_dolphin_volume_fn,
-        })
+        let mut melee_music_volume = 1.0;
+        let mut dolphin_system_volume = (initial_dolphin_system_volume as f32 / 100.0).clamp(0.0, 1.0);
+        let mut dolphin_music_volume = (initial_dolphin_music_volume as f32 / 100.0).clamp(0.0, 1.0);
+
+        loop {
+            match rx.recv()? {
+                StartSong(hps_offset, hps_length) => {
+                    // Stop the currently playing song
+                    sink.stop();
+
+                    // Get the _real_ offset of the hps file on the iso
+                    let real_hps_offset = match get_real_offset(&mut iso, hps_offset)? {
+                        Some(offset) => offset,
+                        None => {
+                            tracing::warn!(
+                                target: Log::Jukebox,
+                                "0x{hps_offset:0x?} has no corresponding offset in the ISO. Cannot play song."
+                            );
+                            continue;
+                        },
+                    };
+
+                    // Parse the bytes as an Hps
+                    let hps: Hps = match copy_bytes_from_file(&mut iso, real_hps_offset, hps_length)?.try_into() {
+                        Ok(hps) => hps,
+                        Err(e) => {
+                            tracing::error!(target: Log::Jukebox, error = ?e, "Failed to parse bytes into an Hps. Cannot play song.");
+                            continue;
+                        },
+                    };
+
+                    // Decode the Hps into audio
+                    let audio_source = HpsAudioSource(hps.into());
+
+                    // Play the song
+                    sink.append(audio_source);
+                    sink.play();
+                },
+                SetVolume(control, volume) => {
+                    use VolumeControl::*;
+
+                    match control {
+                        Melee => melee_music_volume = (volume as f32 / 254.0).clamp(0.0, 1.0),
+                        DolphinSystem => dolphin_system_volume = (volume as f32 / 100.0).clamp(0.0, 1.0),
+                        DolphinMusic => dolphin_music_volume = (volume as f32 / 100.0).clamp(0.0, 1.0),
+                    };
+
+                    sink.set_volume(
+                        melee_music_volume * dolphin_system_volume * dolphin_music_volume * VOLUME_REDUCTION_MULTIPLIER,
+                    );
+                },
+                StopMusic => sink.stop(),
+                JukeboxDropped => return Ok(()),
+            }
+        }
     }
 
-    pub fn play_music(&mut self, hps_offset: u64, hps_length: usize) -> Result<()> {
+    /// Loads the music file in the iso at offset `hps_offset` with a length of
+    /// `hps_length`, decodes it into audio, and plays it back using the default
+    /// audio device
+    pub fn start_song(&mut self, hps_offset: u64, hps_length: usize) {
         tracing::info!(
             target: Log::Jukebox,
-            "Play music. Offset: 0x{hps_offset:0x?}, Length: {hps_length}"
+            "Start song. Offset: 0x{hps_offset:0x?}, Length: {hps_length}"
         );
-
-        let get_real_offset = disc::create_offset_locator_fn(&self.iso_path)?;
-        let real_hps_offset = get_real_offset(hps_offset).ok_or(OffsetMissingFromCompressedIso(hps_offset))?;
-
-        let mut iso = File::open(&self.iso_path)?;
-        let hps: Hps = utils::copy_bytes_from_file(&mut iso, real_hps_offset, hps_length)?.try_into()?;
-        let audio_source = HpsAudioSource(hps.into());
-
-        self.sink.stop();
-        self.sink.append(audio_source);
-        self.sink.play();
-
-        Ok(())
+        let _ = self.tx.send(StartSong(hps_offset, hps_length));
     }
 
+    /// Stops any currently playing music
     pub fn stop_music(&mut self) {
         tracing::info!(target: Log::Jukebox, "Stop music");
-
-        self.sink.stop();
+        let _ = self.tx.send(StopMusic);
     }
 
-    pub fn set_music_volume(&mut self, volume: u8) {
-        tracing::info!(target: Log::Jukebox, "Change in-game music volume: {volume}");
-
-        let melee_volume = (volume as f32 / 254.0).clamp(0.0, 1.0);
-        let dolphin_volume = unsafe { (self.get_dolphin_volume_fn)() as f32 / 100.0 };
-        let volume = melee_volume * dolphin_volume * VOLUME_REDUCTION_MULTIPLIER;
-
-        self.sink.set_volume(volume);
+    // Update the volume for any of Jukebox's volume controls
+    pub fn set_volume(&mut self, volume_control: VolumeControl, volume: u8) {
+        tracing::info!(target: Log::Jukebox, "Change {volume_control:?} volume: {volume}");
+        let _ = self.tx.send(SetVolume(volume_control, volume));
     }
 }
 
-impl Debug for Jukebox {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-        f.debug_struct("Jukebox").finish()
+impl Drop for Jukebox {
+    fn drop(&mut self) {
+        tracing::info!(target: Log::Jukebox, "Dropping Slippi Jukebox");
+        if let Err(e) = self.tx.send(Message::JukeboxDropped) {
+            tracing::warn!(
+                target: Log::Jukebox,
+                "Failed to notify child thread that Jukebox is dropping: {e}"
+            );
+        }
     }
+}
+
+#[derive(Debug)]
+pub enum VolumeControl {
+    Melee,
+    DolphinSystem,
+    DolphinMusic,
 }
 
 // This wrapper allows us to implement `rodio::Source`

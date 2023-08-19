@@ -9,6 +9,7 @@ use std::ffi::{c_char, CStr};
 
 pub mod exi;
 pub mod game_reporter;
+pub mod jukebox;
 pub mod logger;
 
 /// A small helper method for moving in and out of our known types.

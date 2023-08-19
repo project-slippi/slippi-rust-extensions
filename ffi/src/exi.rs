@@ -1,7 +1,7 @@
-use std::ffi::{c_char, c_int};
+use std::ffi::c_char;
 
 use dolphin_integrations::Log;
-use slippi_exi_device::SlippiEXIDevice;
+use slippi_exi_device::{JukeboxConfiguration, SlippiEXIDevice};
 use slippi_game_reporter::GameReport;
 
 use crate::c_str_to_string;
@@ -194,53 +194,22 @@ pub extern "C" fn slprs_exi_device_reporter_push_replay_data(instance_ptr: usize
 pub extern "C" fn slprs_exi_device_configure_jukebox(
     exi_device_instance_ptr: usize,
     is_enabled: bool,
-    get_dolphin_volume_fn: unsafe extern "C" fn() -> c_int,
+    initial_dolphin_system_volume: u8,
+    initial_dolphin_music_volume: u8,
 ) {
     // Coerce the instance from the pointer. This is theoretically safe since we control
     // the C++ side and can guarantee that the `exi_device_instance_ptr` is only owned
     // by the C++ EXI device, and is created/destroyed with the corresponding lifetimes.
     let mut device = unsafe { Box::from_raw(exi_device_instance_ptr as *mut SlippiEXIDevice) };
 
-    device.configure_jukebox(is_enabled, get_dolphin_volume_fn);
-
-    // Fall back into a raw pointer so Rust doesn't obliterate the object.
-    let _leak = Box::into_raw(device);
-}
-
-#[no_mangle]
-pub extern "C" fn slprs_exi_device_jukebox_play_music(exi_device_instance_ptr: usize, hps_offset: u64, hps_length: usize) {
-    // Coerce the instance from the pointer. This is theoretically safe since we control
-    // the C++ side and can guarantee that the `exi_device_instance_ptr` is only owned
-    // by the C++ EXI device, and is created/destroyed with the corresponding lifetimes.
-    let mut device = unsafe { Box::from_raw(exi_device_instance_ptr as *mut SlippiEXIDevice) };
-
-    device.jukebox_play_music(hps_offset, hps_length);
-
-    // Fall back into a raw pointer so Rust doesn't obliterate the object.
-    let _leak = Box::into_raw(device);
-}
-
-#[no_mangle]
-pub extern "C" fn slprs_exi_device_jukebox_stop_music(exi_device_instance_ptr: usize) {
-    // Coerce the instance from the pointer. This is theoretically safe since we control
-    // the C++ side and can guarantee that the `exi_device_instance_ptr` is only owned
-    // by the C++ EXI device, and is created/destroyed with the corresponding lifetimes.
-    let mut device = unsafe { Box::from_raw(exi_device_instance_ptr as *mut SlippiEXIDevice) };
-
-    device.jukebox_stop_music();
-
-    // Fall back into a raw pointer so Rust doesn't obliterate the object.
-    let _leak = Box::into_raw(device);
-}
-
-#[no_mangle]
-pub extern "C" fn slprs_exi_device_jukebox_set_music_volume(exi_device_instance_ptr: usize, volume: u8) {
-    // Coerce the instance from the pointer. This is theoretically safe since we control
-    // the C++ side and can guarantee that the `exi_device_instance_ptr` is only owned
-    // by the C++ EXI device, and is created/destroyed with the corresponding lifetimes.
-    let mut device = unsafe { Box::from_raw(exi_device_instance_ptr as *mut SlippiEXIDevice) };
-
-    device.jukebox_set_music_volume(volume);
+    let jukebox_config = match is_enabled {
+        true => JukeboxConfiguration::Start {
+            initial_dolphin_system_volume,
+            initial_dolphin_music_volume,
+        },
+        false => JukeboxConfiguration::Stop,
+    };
+    device.configure_jukebox(jukebox_config);
 
     // Fall back into a raw pointer so Rust doesn't obliterate the object.
     let _leak = Box::into_raw(device);

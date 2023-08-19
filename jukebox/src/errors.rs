@@ -1,15 +1,20 @@
 use thiserror::Error;
 
+use crate::Message;
+
 #[derive(Error, Debug)]
 pub enum JukeboxError {
     #[error("{0}")]
     GenericIO(#[from] std::io::Error),
 
-    #[error("The desired offset ({0}) doesn't exist in the compressed ISO")]
-    OffsetMissingFromCompressedIso(u64),
+    #[error("Failed to spawn thread: {0}")]
+    ThreadSpawn(std::io::Error),
 
-    #[error("Failed to decode music file: {0}")]
-    MusicFileDecoding(#[from] hps_decode::hps::HpsParseError),
+    #[error("The channel receiver has disconnected, implying that the data could never be received.")]
+    ChannelReceiverDisconnected(#[from] std::sync::mpsc::SendError<Message>),
+
+    #[error("The channel sender has disconnected, implying no further messages will be received.")]
+    ChannelSenderDisconnected(#[from] std::sync::mpsc::RecvError),
 
     #[error("Unable to get an audio device handle: {0}")]
     AudioDevice(#[from] rodio::StreamError),
