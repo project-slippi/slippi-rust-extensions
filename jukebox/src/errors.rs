@@ -16,9 +16,6 @@ pub enum JukeboxError {
     #[error("The channel sender has disconnected, implying no further messages will be received.")]
     ChannelSenderDisconnected(#[from] std::sync::mpsc::RecvError),
 
-    #[error("Failed to decode music file: {0}")]
-    MusicFileDecoding(#[from] hps_decode::hps::HpsParseError),
-
     #[error("Unable to get an audio device handle: {0}")]
     AudioDevice(#[from] rodio::StreamError),
 
