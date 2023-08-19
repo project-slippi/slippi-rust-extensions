@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-/// A thread-safe wrapper that manages access to the underlying `UserInfo` payload.
+/// A thread-safe wrapper that manages access to the underlying `T` payload.
 #[derive(Debug)]
 pub struct ThreadSafeWrapper<T> {
     debug_label: &'static str,
@@ -18,7 +18,7 @@ impl<T> Clone for ThreadSafeWrapper<T> {
 }
 
 impl<T> ThreadSafeWrapper<T> {
-    /// Creates and returns a blank User.
+    /// Creates and returns a blank wrapped `T`.
     pub fn new(debug_label: &'static str, inner: T) -> Self {
         Self {
             debug_label,
@@ -41,14 +41,6 @@ impl<T> ThreadSafeWrapper<T> {
 
     /// A helper method for setting an arbitrary field on the underlying user info
     /// payload. If the user info payload is `None`, this will lock and then exit.
-    ///
-    /// Usage is, e.g:
-    ///
-    /// ```no_run
-    /// user.with_mut(|user| {
-    ///     user.latest_version = String::new();
-    /// });
-    /// ```
     pub fn with_mut<F>(&self, handler: F)
     where
         F: FnOnce(&mut T),
@@ -73,7 +65,7 @@ impl<T> ThreadSafeWrapper<T> {
             Ok(lock) => Some(handler(&lock)),
 
             Err(error) => {
-                tracing::error!(?error, ?self.debug_label, "Unable to lock user info for getting");
+                tracing::error!(?error, ?self.debug_label, "Unable to lock for getting");
                 None
             },
         }
