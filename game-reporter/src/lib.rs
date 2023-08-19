@@ -142,18 +142,14 @@ impl SlippiGameReporter {
 
     /// Reports a match abandon event.
     pub fn report_abandonment(&self, match_id: String) {
-        let (uid, play_key) = self.user_manager.get(|user| {
-            (user.uid.clone(), user.play_key.clone())
-        });
+        let (uid, play_key) = self.user_manager.get(|user| (user.uid.clone(), user.play_key.clone()));
 
         self.queue.report_abandonment(uid, play_key, match_id);
     }
 
     /// Dispatches a completion report to a background processing thread.
     pub fn report_completion(&self, match_id: String, end_mode: u8) {
-        let (uid, play_key) = self.user_manager.get(|user| {
-            (user.uid.clone(), user.play_key.clone())
-        });
+        let (uid, play_key) = self.user_manager.get(|user| (user.uid.clone(), user.play_key.clone()));
 
         let event = CompletionEvent::ReportAvailable {
             uid,

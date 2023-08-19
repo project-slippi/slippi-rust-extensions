@@ -11,16 +11,13 @@ use crate::c_str_to_string;
 pub struct EXIDeviceConfig {
     iso_path: *const c_char,
     user_folder_path: *const c_char,
-    osd_add_msg_fn: unsafe extern "C" fn(*const c_char, u32, u32)
+    osd_add_msg_fn: unsafe extern "C" fn(*const c_char, u32, u32),
 }
 
 #[no_mangle]
-pub extern "C" fn slprs_lol(
-    _config: EXIDeviceConfig
-) -> usize {
+pub extern "C" fn slprs_lol(_config: EXIDeviceConfig) -> usize {
     0
 }
-
 
 /// Creates and leaks a shadow EXI device.
 ///
@@ -139,11 +136,7 @@ pub extern "C" fn slprs_exi_device_start_new_reporter_session(instance_ptr: usiz
 /// Calls through to the `SlippiGameReporter` on the EXI device to report a
 /// match completion event.
 #[no_mangle]
-pub extern "C" fn slprs_exi_device_report_match_completion(
-    instance_ptr: usize,
-    match_id: *const c_char,
-    end_mode: u8,
-) {
+pub extern "C" fn slprs_exi_device_report_match_completion(instance_ptr: usize, match_id: *const c_char, end_mode: u8) {
     // Coerce the instances from the pointers. This is theoretically safe since we control
     // the C++ side and can guarantee that the pointers are only owned
     // by us, and are created/destroyed with the corresponding lifetimes.
@@ -161,10 +154,7 @@ pub extern "C" fn slprs_exi_device_report_match_completion(
 /// Calls through to the `SlippiGameReporter` on the EXI device to report a
 /// match abandon event.
 #[no_mangle]
-pub extern "C" fn slprs_exi_device_report_match_abandonment(
-    instance_ptr: usize,
-    match_id: *const c_char,
-) {
+pub extern "C" fn slprs_exi_device_report_match_abandonment(instance_ptr: usize, match_id: *const c_char) {
     // Coerce the instances from the pointers. This is theoretically safe since we control
     // the C++ side and can guarantee that the pointers are only owned
     // by us, and are created/destroyed with the corresponding lifetimes.

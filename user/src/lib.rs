@@ -59,7 +59,7 @@ impl UserInfo {
 pub struct UserManager {
     user: Arc<Mutex<UserInfo>>,
     user_json_path: Arc<PathBuf>,
-    watcher: Arc<Mutex<UserInfoWatcher>>
+    watcher: Arc<Mutex<UserInfoWatcher>>,
 }
 
 impl UserManager {
@@ -74,7 +74,11 @@ impl UserManager {
         let user_json_path = Arc::new(user_folder_path.join("user.json"));
         let watcher = Arc::new(Mutex::new(UserInfoWatcher::new()));
 
-        Self { user, user_json_path, watcher }
+        Self {
+            user,
+            user_json_path,
+            watcher,
+        }
     }
 
     /// User info is held behind a Mutex as we access it from multiple threads. To read data
@@ -100,8 +104,7 @@ impl UserManager {
     where
         F: FnOnce(&UserInfo) -> R,
     {
-        let lock = self.user.lock()
-            .expect("Unable to acquire user getter lock");
+        let lock = self.user.lock().expect("Unable to acquire user getter lock");
 
         handler(&lock)
     }
@@ -123,20 +126,18 @@ impl UserManager {
     where
         F: FnOnce(&mut UserInfo),
     {
-        let mut lock = self.user.lock()
-            .expect("Unable to acquire user setter lock");
+        let mut lock = self.user.lock().expect("Unable to acquire user setter lock");
 
         handler(&mut lock);
     }
 
     /// Kicks off a background handler for processing user authentication.
     pub fn watch_for_login(&self) {
-        let mut watcher = self.watcher.lock()
-            .expect("Unable to acquire user watcher lock");
+        let mut watcher = self.watcher.lock().expect("Unable to acquire user watcher lock");
 
         watcher.watch_for_login(self.user_json_path.clone(), self.user.clone());
     }
-    
+
     /// Returns whether we have an authenticated user - i.e, whether we were able
     /// to find/load/parse their `user.json` file.
     pub fn is_logged_in(&self) -> bool {
@@ -150,7 +151,7 @@ impl UserManager {
             user.latest_version = version;
         });
     }
-    
+
     /// Logs the current user out and removes their `user.json` from the filesystem.
     pub fn logout(&mut self) {
         self.set(|user| *user = UserInfo::default());
@@ -159,8 +160,7 @@ impl UserManager {
             tracing::error!(?error, "Failed to remove user.json on logout");
         }
 
-        let mut watcher = self.watcher.lock()
-            .expect("Unable to acquire watcher lock on user logout");
+        let mut watcher = self.watcher.lock().expect("Unable to acquire watcher lock on user logout");
 
         watcher.logout();
     }
@@ -184,11 +184,7 @@ impl UserInfoWatcher {
     }
 
     /// Spins up (or re-spins-up) the background watcher thread for the `user.json` file.
-    pub fn watch_for_login(
-        &mut self,
-        user_json_path: Arc<PathBuf>,
-        user: Arc<Mutex<UserInfo>>
-    ) {
+    pub fn watch_for_login(&mut self, user_json_path: Arc<PathBuf>, user: Arc<Mutex<UserInfo>>) {
         // If we're already watching, no-op out.
         if self.should_watch.load(Ordering::Relaxed) {
             return;
@@ -253,8 +249,7 @@ fn attempt_login(user: &Arc<Mutex<UserInfo>>, user_json_path: &PathBuf) -> bool 
 
                 let uid = info.uid.clone();
                 {
-                    let mut lock = user.lock()
-                        .expect("Unable to lock user in attempt_login");
+                    let mut lock = user.lock().expect("Unable to lock user in attempt_login");
 
                     *lock = info;
                 }
@@ -313,9 +308,8 @@ fn overwrite_from_server(user: &Arc<Mutex<UserInfo>>, uid: String) {
             Ok(body) => match serde_json::from_str::<UserInfo>(&body) {
                 Ok(mut info) => {
                     info.sanitize();
-                    
-                    let mut lock = user.lock()
-                        .expect("Unable to lock user in attempt_login");
+
+                    let mut lock = user.lock().expect("Unable to lock user in attempt_login");
 
                     *lock = info;
                 },

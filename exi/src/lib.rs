@@ -28,10 +28,7 @@ impl SlippiEXIDevice {
 
         let user_manager = UserManager::new(user_folder_path.into());
 
-        let game_reporter = SlippiGameReporter::new(
-            user_manager.clone(),
-            iso_path.clone()
-        );
+        let game_reporter = SlippiGameReporter::new(user_manager.clone(), iso_path.clone());
 
         // Playback has no need to deal with this.
         // (We could maybe silo more?)
