@@ -4,7 +4,8 @@
 use std::fs::File;
 use std::sync::{Arc, Mutex};
 
-use chksum::prelude::*;
+use chksum::chksum;
+use chksum::hash::MD5;
 
 use dolphin_integrations::{Color, Dolphin, Duration, Log};
 
@@ -26,7 +27,7 @@ const KNOWN_DESYNC_ISOS: [&'static str; 4] = [
 /// failure gracefully - however seemingly rare - and simply logs the error.
 pub fn run(iso_hash: Arc<Mutex<String>>, iso_path: String) {
     let digest = match File::open(&iso_path) {
-        Ok(mut file) => match file.chksum(HashAlgorithm::MD5) {
+        Ok(file) => match chksum::<MD5, _>(file) {
             Ok(digest) => digest,
 
             Err(error) => {
