@@ -1,4 +1,5 @@
 use slippi_exi_device::SlippiEXIDevice;
+use slippi_jukebox::VolumeControl;
 
 /// Calls through to `Jukebox::start_song`.
 #[no_mangle]
@@ -32,7 +33,7 @@ pub extern "C" fn slprs_jukebox_stop_music(exi_device_instance_ptr: usize) {
     let _leak = Box::into_raw(device);
 }
 
-/// Calls through to `Jukebox::set_melee_music_volume`.
+/// Calls through to `Jukebox::set_volume` with the Melee volume control.
 #[no_mangle]
 pub extern "C" fn slprs_jukebox_set_melee_music_volume(exi_device_instance_ptr: usize, volume: u8) {
     // Coerce the instance from the pointer. This is theoretically safe since we control
@@ -41,14 +42,14 @@ pub extern "C" fn slprs_jukebox_set_melee_music_volume(exi_device_instance_ptr: 
     let mut device = unsafe { Box::from_raw(exi_device_instance_ptr as *mut SlippiEXIDevice) };
 
     if let Some(jukebox) = device.jukebox.as_mut() {
-        jukebox.set_melee_music_volume(volume);
+        jukebox.set_volume(VolumeControl::Melee, volume);
     }
 
     // Fall back into a raw pointer so Rust doesn't obliterate the object.
     let _leak = Box::into_raw(device);
 }
 
-/// Calls through to `Jukebox::set_dolphin_system_volume`.
+/// Calls through to `Jukebox::set_volume` with the DolphinSystem volume control.
 #[no_mangle]
 pub extern "C" fn slprs_jukebox_set_dolphin_system_volume(exi_device_instance_ptr: usize, volume: u8) {
     // Coerce the instance from the pointer. This is theoretically safe since we control
@@ -57,14 +58,14 @@ pub extern "C" fn slprs_jukebox_set_dolphin_system_volume(exi_device_instance_pt
     let mut device = unsafe { Box::from_raw(exi_device_instance_ptr as *mut SlippiEXIDevice) };
 
     if let Some(jukebox) = device.jukebox.as_mut() {
-        jukebox.set_dolphin_system_volume(volume);
+        jukebox.set_volume(VolumeControl::DolphinSystem, volume);
     }
 
     // Fall back into a raw pointer so Rust doesn't obliterate the object.
     let _leak = Box::into_raw(device);
 }
 
-/// Calls through to `Jukebox::set_dolphin_music_volume`.
+/// Calls through to `Jukebox::set_volume` with the DolphinMusic volume control.
 #[no_mangle]
 pub extern "C" fn slprs_jukebox_set_dolphin_music_volume(exi_device_instance_ptr: usize, volume: u8) {
     // Coerce the instance from the pointer. This is theoretically safe since we control
@@ -73,7 +74,7 @@ pub extern "C" fn slprs_jukebox_set_dolphin_music_volume(exi_device_instance_ptr
     let mut device = unsafe { Box::from_raw(exi_device_instance_ptr as *mut SlippiEXIDevice) };
 
     if let Some(jukebox) = device.jukebox.as_mut() {
-        jukebox.set_dolphin_music_volume(volume);
+        jukebox.set_volume(VolumeControl::DolphinMusic, volume);
     }
 
     // Fall back into a raw pointer so Rust doesn't obliterate the object.

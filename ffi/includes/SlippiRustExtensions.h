@@ -129,13 +129,13 @@ void slprs_jukebox_start_song(uintptr_t exi_device_instance_ptr,
 /// Calls through to `Jukebox::stop_music`.
 void slprs_jukebox_stop_music(uintptr_t exi_device_instance_ptr);
 
-/// Calls through to `Jukebox::set_melee_music_volume`.
+/// Calls through to `Jukebox::set_volume` with the Melee volume control.
 void slprs_jukebox_set_melee_music_volume(uintptr_t exi_device_instance_ptr, uint8_t volume);
 
-/// Calls through to `Jukebox::set_dolphin_system_volume`.
+/// Calls through to `Jukebox::set_volume` with the DolphinSystem volume control.
 void slprs_jukebox_set_dolphin_system_volume(uintptr_t exi_device_instance_ptr, uint8_t volume);
 
-/// Calls through to `Jukebox::set_dolphin_music_volume`.
+/// Calls through to `Jukebox::set_volume` with the DolphinMusic volume control.
 void slprs_jukebox_set_dolphin_music_volume(uintptr_t exi_device_instance_ptr, uint8_t volume);
 
 /// This should be called from the Dolphin LogManager initialization to ensure that

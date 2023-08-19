@@ -30,4 +30,5 @@ playback = []
 dolphin-integrations = { path = "../dolphin" }
 slippi-game-reporter = { path = "../game-reporter" }
 slippi-exi-device = { path = "../exi" }
+slippi-jukebox = { path = "../jukebox" }
 tracing = { workspace = true }

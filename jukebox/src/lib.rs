@@ -30,9 +30,7 @@ const VOLUME_REDUCTION_MULTIPLIER: f32 = 0.8;
 pub enum Message {
     StartSong(u64, usize),
     StopMusic,
-    SetMeleeMusicVolume(u8),
-    SetDolphinSystemVolume(u8),
-    SetDolphinMusicVolume(u8),
+    SetVolume(VolumeControl, u8),
     JukeboxDropped,
 }
 
@@ -92,18 +90,17 @@ impl Jukebox {
 
         let mut iso = File::open(&iso_path)?;
 
-        let mut volume = Volume {
-            melee_music: 1.0,
-            dolphin_system: (initial_dolphin_system_volume as f32 / 100.0).clamp(0.0, 1.0),
-            dolphin_music: (initial_dolphin_music_volume as f32 / 100.0).clamp(0.0, 1.0),
-        };
-
-        let set_sink_volume =
-            |v: &Volume| sink.set_volume(v.melee_music * v.dolphin_music * v.dolphin_system * VOLUME_REDUCTION_MULTIPLIER);
+        let mut melee_music_volume = 1.0;
+        let mut dolphin_system_volume = (initial_dolphin_system_volume as f32 / 100.0).clamp(0.0, 1.0);
+        let mut dolphin_music_volume = (initial_dolphin_music_volume as f32 / 100.0).clamp(0.0, 1.0);
 
         loop {
             match rx.recv()? {
                 StartSong(hps_offset, hps_length) => {
+                    // Stop the currently playing song
+                    sink.stop();
+
+                    // Get the _real_ offset of the hps file on the iso
                     let real_hps_offset = match get_real_offset(&mut iso, hps_offset)? {
                         Some(offset) => offset,
                         None => {
@@ -115,40 +112,35 @@ impl Jukebox {
                         },
                     };
 
-                    let song: Hps = match copy_bytes_from_file(&mut iso, real_hps_offset, hps_length)?.try_into() {
-                        Ok(song) => song,
+                    // Parse the bytes as an Hps
+                    let hps: Hps = match copy_bytes_from_file(&mut iso, real_hps_offset, hps_length)?.try_into() {
+                        Ok(hps) => hps,
                         Err(e) => {
-                            tracing::error!(
-                                target: Log::Jukebox,
-                                error = ?e,
-                                "Failed to decode the bytes at 0x{hps_offset:0x?} into an Hps. Cannot play song."
-                            );
+                            tracing::error!(target: Log::Jukebox, error = ?e, "Failed to parse bytes into an Hps. Cannot play song.");
                             continue;
                         },
                     };
 
-                    let audio_source = HpsAudioSource(song.into());
+                    // Decode the Hps into audio
+                    let audio_source = HpsAudioSource(hps.into());
 
-                    sink.stop();
+                    // Play the song
                     sink.append(audio_source);
                     sink.play();
                 },
+                SetVolume(control, volume) => {
+                    use VolumeControl::*;
 
-                SetMeleeMusicVolume(value) => {
-                    volume.melee_music = (value as f32 / 254.0).clamp(0.0, 1.0);
-                    set_sink_volume(&volume);
+                    match control {
+                        Melee => melee_music_volume = (volume as f32 / 254.0).clamp(0.0, 1.0),
+                        DolphinSystem => dolphin_system_volume = (volume as f32 / 100.0).clamp(0.0, 1.0),
+                        DolphinMusic => dolphin_music_volume = (volume as f32 / 100.0).clamp(0.0, 1.0),
+                    };
+
+                    sink.set_volume(
+                        melee_music_volume * dolphin_system_volume * dolphin_music_volume * VOLUME_REDUCTION_MULTIPLIER,
+                    );
                 },
-
-                SetDolphinSystemVolume(value) => {
-                    volume.dolphin_system = (value as f32 / 100.0).clamp(0.0, 1.0);
-                    set_sink_volume(&volume);
-                },
-
-                SetDolphinMusicVolume(value) => {
-                    volume.dolphin_music = (value as f32 / 100.0).clamp(0.0, 1.0);
-                    set_sink_volume(&volume);
-                },
-
                 StopMusic => sink.stop(),
                 JukeboxDropped => return Ok(()),
             }
@@ -172,24 +164,10 @@ impl Jukebox {
         let _ = self.tx.send(StopMusic);
     }
 
-    /// Indicate to the jukebox instance that melee's in-game volume has changed
-    pub fn set_melee_music_volume(&mut self, volume: u8) {
-        tracing::info!(target: Log::Jukebox, "Change in-game music volume: {volume}");
-        let _ = self.tx.send(SetMeleeMusicVolume(volume));
-    }
-
-    /// Indicate to the jukebox instance that Dolphin's audio config volume has
-    /// changed
-    pub fn set_dolphin_system_volume(&mut self, volume: u8) {
-        tracing::info!(target: Log::Jukebox, "Change dolphin audio config volume: {volume}");
-        let _ = self.tx.send(SetDolphinSystemVolume(volume));
-    }
-
-    /// Indicate to the jukebox instance that Dolphin's "Jukebox volume" slider
-    /// value has changed
-    pub fn set_dolphin_music_volume(&mut self, volume: u8) {
-        tracing::info!(target: Log::Jukebox, "Change jukebox music volume: {volume}");
-        let _ = self.tx.send(SetDolphinMusicVolume(volume));
+    // Update the volume for any of Jukebox's volume controls
+    pub fn set_volume(&mut self, volume_control: VolumeControl, volume: u8) {
+        tracing::info!(target: Log::Jukebox, "Change {volume_control:?} volume: {volume}");
+        let _ = self.tx.send(SetVolume(volume_control, volume));
     }
 }
 
@@ -205,10 +183,11 @@ impl Drop for Jukebox {
     }
 }
 
-struct Volume {
-    melee_music: f32,
-    dolphin_music: f32,
-    dolphin_system: f32,
+#[derive(Debug)]
+pub enum VolumeControl {
+    Melee,
+    DolphinSystem,
+    DolphinMusic,
 }
 
 // This wrapper allows us to implement `rodio::Source`
