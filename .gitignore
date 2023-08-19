@@ -1,4 +1,1 @@
 /target
-
-# Libs shouldn't check this in, only binaries
-Cargo.lock
