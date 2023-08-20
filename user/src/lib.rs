@@ -32,10 +32,8 @@ pub struct UserInfo {
     #[serde(alias = "latestVersion")]
     pub latest_version: String,
 
-    pub port: Option<i64>,
-
     #[serde(alias = "chatMessages")]
-    pub chat_messages: Vec<String>,
+    pub chat_messages: Option<Vec<String>>
 }
 
 impl UserInfo {
@@ -43,8 +41,9 @@ impl UserInfo {
     ///
     /// Mostly checks to make sure we're not loading or receiving anything undesired.
     pub fn sanitize(&mut self) {
-        if self.chat_messages.len() != 16 {
-            self.chat_messages = chat::default();
+        if self.chat_messages.is_none() || self.chat_messages.as_ref().unwrap().len() != 16 {
+        // if self.chat_messages.len() != 16 {
+            self.chat_messages = Some(chat::default());
         }
     }
 }
@@ -69,9 +68,9 @@ impl UserManager {
     /// live. This is an OS-specific value and we currently need to share it with Dolphin,
     /// so this should be passed via the FFI layer. In the future, we may be able to remove
     /// this restriction via some assumptions.
-    pub fn new(user_folder_path: PathBuf) -> Self {
+    pub fn new(user_json_path: PathBuf) -> Self {
         let user = Arc::new(Mutex::new(UserInfo::default()));
-        let user_json_path = Arc::new(user_folder_path.join("user.json"));
+        let user_json_path = Arc::new(user_json_path);
         let watcher = Arc::new(Mutex::new(UserInfoWatcher::new()));
 
         Self {
@@ -131,11 +130,48 @@ impl UserManager {
         handler(&mut lock);
     }
 
+    /// Runs the `attempt_login` function on the calling thread. If you need this to run in the
+    /// background, you want `watch_for_login` instead.
+    pub fn attempt_login(&self) -> bool {
+        attempt_login(&self.user, &self.user_json_path)
+    }
+
     /// Kicks off a background handler for processing user authentication.
     pub fn watch_for_login(&self) {
         let mut watcher = self.watcher.lock().expect("Unable to acquire user watcher lock");
 
         watcher.watch_for_login(self.user_json_path.clone(), self.user.clone());
+    }
+
+    /// Pops open a browser window for the older authentication flow. This is less encountered by
+    /// users as time goes on, but may still be used.
+    pub fn open_login_page(&self) {
+        let path_ref = self.user_json_path.as_path();
+
+        if let Some(path) = path_ref.to_str() {
+            let url = format!("https://slippi.gg/online/enable?path={path}");
+
+            tracing::info!("[User] Login at path: {}", url);
+
+            if let Err(error) = open::that_detached(&url) {
+                tracing::error!(?error, ?url, "Failed to open login page");
+            }
+        } else {
+            // This should never really happen, but it's conceivable that some odd unicode path
+            // errors could happen... so just dump a log I guess.
+            tracing::warn!(?path_ref, "Unable to convert user.json path to UTF-8 string");
+        }
+    }
+
+    /// Pops open a browser window for the update URL. This is less encountered by users as time goes
+    /// by, but still used.
+    pub fn update_app(&self) -> bool {
+        if let Err(error) = open::that_detached("https://slippi.gg/downloads?update=true") {
+            tracing::error!(?error, "Failed to open update URL");
+            return false;
+        }
+
+        true
     }
 
     /// Returns whether we have an authenticated user - i.e, whether we were able
@@ -146,7 +182,7 @@ impl UserManager {
 
     /// During matchmaking, we may opt to force-overwrite the latest version to
     /// account for errors that can happen when the user tries to update.
-    pub fn overwrite_latest_version(&mut self, version: String) {
+    pub fn overwrite_latest_version(&self, version: String) {
         self.set(|user| {
             user.latest_version = version;
         });
@@ -273,17 +309,6 @@ fn attempt_login(user: &Arc<Mutex<UserInfo>>, user_json_path: &PathBuf) -> bool 
             return false;
         },
     }
-}
-
-/// Pops open a browser window for the update URL. This is less encountered by users as time goes
-/// by, but still used.
-pub fn update_app() -> bool {
-    if let Err(error) = open::that_detached("https://slippi.gg/downloads?update=true") {
-        tracing::error!(?error, "Failed to open update URL");
-        return false;
-    }
-
-    true
 }
 
 /// Calls out to the Slippi server and fetches the user info, patching up the user info object

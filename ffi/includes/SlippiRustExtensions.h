@@ -24,6 +24,18 @@ struct EXIDeviceConfig {
   void (*osd_add_msg_fn)(const char*, uint32_t, uint32_t);
 };
 
+/// An intermediary type for moving `UserInfo` across the FFI boundary.
+///
+/// This type is C compatible, and we coerce Rust types into C types for this struct to
+/// ease passing things over.
+struct RustUserInfo {
+  const char *uid;
+  const char *play_key;
+  const char *display_name;
+  const char *connect_code;
+  const char *latest_version;
+};
+
 extern "C" {
 
 uintptr_t slprs_lol(EXIDeviceConfig _config);
@@ -163,5 +175,50 @@ void slprs_logging_update_container(const char *kind, bool enabled, int level);
 ///
 /// For more information, see `dolphin_logger::update_container`.
 void slprs_mainline_logging_update_log_level(int level);
+
+/// Instructs the `UserManager` on the EXI Device at the provided pointer to attempt
+/// authentication. This runs synchronously on whatever thread it's called on.
+bool slprs_user_attempt_login(uintptr_t exi_device_instance_ptr);
+
+/// Instructs the `UserManager` on the EXI Device at the provided pointer to try to
+/// open the login page in a system-provided browser view.
+void slprs_user_open_login_page(uintptr_t exi_device_instance_ptr);
+
+/// Instructs the `UserManager` on the EXI Device at the provided pointer to attempt
+/// to initiate the older update flow.
+bool slprs_user_update_app(uintptr_t exi_device_instance_ptr);
+
+/// Instructs the `UserManager` on the EXI Device at the provided pointer to start watching
+/// for the presence of a `user.json` file. The `UserManager` should have the requisite path
+/// already from EXI device instantiation.
+void slprs_user_listen_for_login(uintptr_t exi_device_instance_ptr);
+
+/// Instructs the `UserManager` on the EXI Device at the provided pointer to sign the user out.
+/// This will delete the `user.json` file from the underlying filesystem.
+void slprs_user_logout(uintptr_t exi_device_instance_ptr);
+
+/// Hooks through the `UserManager` on the EXI Device at the provided pointer to overwrite the
+/// latest version field on the current user.
+void slprs_user_overwrite_latest_version(uintptr_t exi_device_instance_ptr, const char *version);
+
+/// Hooks through the `UserManager` on the EXI Device at the provided pointer to determine
+/// authentication status.
+bool slprs_user_get_is_logged_in(uintptr_t exi_device_instance_ptr);
+
+/// Hooks through the `UserManager` on the EXI Device at the provided pointer to get information
+/// for the current user. This then wraps it in a C struct to pass back so that ownership is safely
+/// moved.
+///
+/// This involves slightly more allocations than ideal, so this shouldn't be called in a hot path.
+/// Over time this issue will not matter as once Matchmaking is moved to Rust we can share things
+/// quite easily.
+RustUserInfo *slprs_user_get_info(uintptr_t exi_device_instance_ptr);
+
+/// Takes ownership back of a `UserInfo` struct and drops it.
+///
+/// When the C/C++ side grabs `UserInfo`, it needs to ensure that it's passed back to Rust
+/// to ensure that the memory layout matches - do _not_ call `free` on `UserInfo`, pass it here
+/// instead.
+void slprs_user_free_info(RustUserInfo *ptr);
 
 } // extern "C"

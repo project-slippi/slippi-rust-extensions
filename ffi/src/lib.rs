@@ -10,6 +10,7 @@ use std::ffi::{c_char, CStr};
 pub mod exi;
 pub mod game_reporter;
 pub mod logger;
+pub mod user;
 
 /// A small helper method for moving in and out of our known types.
 pub(crate) fn set<T, F>(instance_ptr: usize, handler: F)
