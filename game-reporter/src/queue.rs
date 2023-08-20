@@ -16,8 +16,7 @@ use crate::{CompletionEvent, ProcessingEvent};
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use std::io::Write;
-
-const GRAPHQL_URL: &str = "https://gql-gateway-dev-dot-slippi.uc.r.appspot.com/graphql";
+use slippi_config::SlippiConfig;
 
 /// How many times a report should attempt to send.
 const MAX_REPORT_ATTEMPTS: i32 = 5;
@@ -372,9 +371,11 @@ fn execute_graphql_query(
         }),
     };
 
+    let url = SlippiConfig::get().graphql_url.unwrap();
+
     // Make the GraphQL request
     let response = http_client
-        .post(GRAPHQL_URL)
+        .post(url.as_str())
         .send_json(&request_body)
         .map_err(ReportSendErrorKind::Net)?;
 

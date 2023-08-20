@@ -16,4 +16,4 @@ mainline = []
 
 [dependencies]
 serde = { workspace = true }
-serde_yaml = "0.9"
+toml = "0"

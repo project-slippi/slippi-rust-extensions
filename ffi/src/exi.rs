@@ -3,7 +3,7 @@ use std::ffi::{c_char, c_int};
 use dolphin_integrations::Log;
 use slippi_exi_device::SlippiEXIDevice;
 use slippi_game_reporter::GameReport;
-use slippi_config::{SlippiConfig, Configuration};
+use slippi_config::SlippiConfig;
 
 use crate::c_str_to_string;
 
@@ -202,8 +202,8 @@ pub extern "C" fn slprs_exi_device_configure_jukebox(
     // by the C++ EXI device, and is created/destroyed with the corresponding lifetimes.
     let mut device = unsafe { Box::from_raw(exi_device_instance_ptr as *mut SlippiEXIDevice) };
 
-    let config: Configuration = SlippiConfig::get();
-    println!("{:?} {}", config, config.graphql_url);
+    let config: SlippiConfig = SlippiConfig::get();
+    println!("{:?}", config);
 
     device.configure_jukebox(is_enabled, get_dolphin_volume_fn);
 

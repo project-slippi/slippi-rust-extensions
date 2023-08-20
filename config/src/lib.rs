@@ -1,46 +1,59 @@
-
 use std::sync::OnceLock;
 use std::env;
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
+use std::fs;
+use std::path::PathBuf;
+
+pub(crate) static _SLP_CFG: OnceLock<SlippiConfig> = OnceLock::new();
 
 #[derive(Clone, Debug, serde::Deserialize)]
-pub struct Configuration {
-    pub graphql_url: String,
+pub struct SlippiConfig {
+    pub graphql_url: Option<String>,
+
 }
 
-
-pub(crate) static _SLP_CFG: OnceLock<Configuration> = OnceLock::new();
-
-
-pub struct SlippiConfig;
-
 impl SlippiConfig {
-
-    fn init_config(env: &String) {
-        // Read the YAML file
-        let config_path = format!("config/{}.toml", env);
-        let path = Path::new(&config_path);
-        let mut file = File::open(&path).expect("Unable to open file");
-        let mut contents = String::new();
-        file.read_to_string(&mut contents).expect("Unable to read the file");
-
-        // Deserialize the YAML contents into the struct
-        let config: Configuration = serde_yaml::from_str(&contents).unwrap();
-        println!("{:?}", config);
-
-        _SLP_CFG.set(config).expect("Could not initialize Configuration!");
+    /// Merges two configurations. Values in `other` take precedence.
+    fn merge(self, other: Self) -> Self {
+        Self {
+            graphql_url: other.graphql_url.or(self.graphql_url),
+        }
     }
 
+    /// Default configuration values are sourced from the environment.
+    fn default() -> Self {
+        Self {
+            graphql_url: env::var("SLIPPI_GRAPHQL_URL").ok(),
+        }
+    }
+
+    /// Initializes the configuration based on a provided environment.
+    fn init_config(env: &str) {
+        let path = PathBuf::from(file!())
+            .parent()
+            .expect("Failed to get parent directory")
+            .join(format!("../envs/{}.toml", env));
+
+        // Read the file content
+        let contents = fs::read_to_string(&path).expect("Unable to read the file");
+
+        // Deserialize the TOML contents into the struct
+        let file_config: Self = toml::from_str(&contents).expect("Failed to parse TOML");
+
+        // Merge with default values
+        let merged_config = Self::default().merge(file_config);
+
+        _SLP_CFG.set(merged_config).expect("Could not initialize Config!");
+    }
+
+    /// Fetches the environment from an environment variable, defaulting to "development".
     fn get_env() -> String {
-        env::var("SLIPPI_ENV").unwrap_or(String::from("development"))
+        env::var("SLIPPI_ENV").unwrap_or_else(|_| String::from("development"))
     }
 
-    pub fn get() -> Configuration
-    {
+    /// Retrieves the configuration. Initializes it if it's accessed for the first time.
+    pub fn get() -> Self {
         if _SLP_CFG.get().is_none() {
-            SlippiConfig::init_config(&SlippiConfig::get_env());
+            Self::init_config(&Self::get_env());
         }
 
         _SLP_CFG.get().unwrap().clone()
