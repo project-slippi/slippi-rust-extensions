@@ -33,7 +33,7 @@ pub struct UserInfo {
     pub latest_version: String,
 
     #[serde(alias = "chatMessages")]
-    pub chat_messages: Option<Vec<String>>
+    pub chat_messages: Option<Vec<String>>,
 }
 
 impl UserInfo {
@@ -42,7 +42,7 @@ impl UserInfo {
     /// Mostly checks to make sure we're not loading or receiving anything undesired.
     pub fn sanitize(&mut self) {
         if self.chat_messages.is_none() || self.chat_messages.as_ref().unwrap().len() != 16 {
-        // if self.chat_messages.len() != 16 {
+            // if self.chat_messages.len() != 16 {
             self.chat_messages = Some(chat::default());
         }
     }
@@ -311,6 +311,25 @@ fn attempt_login(user: &Arc<Mutex<UserInfo>>, user_json_path: &PathBuf) -> bool 
     }
 }
 
+/// The core payload that represents user information. This type is expected to conform
+/// to the same definition that the remote server uses.
+#[derive(Debug, Default, serde::Deserialize)]
+pub struct APIResponse {
+    pub uid: String,
+
+    #[serde(alias = "displayName")]
+    pub display_name: String,
+
+    #[serde(alias = "connectCode")]
+    pub connect_code: String,
+
+    #[serde(alias = "latestVersion")]
+    pub latest_version: String,
+
+    #[serde(alias = "chatMessages")]
+    pub chat_messages: Vec<String>,
+}
+
 /// Calls out to the Slippi server and fetches the user info, patching up the user info object
 /// with any returned information.
 fn overwrite_from_server(user: &Arc<Mutex<UserInfo>>, uid: String) {
@@ -330,13 +349,17 @@ fn overwrite_from_server(user: &Arc<Mutex<UserInfo>>, uid: String) {
 
     match client.get(&url).call() {
         Ok(response) => match response.into_string() {
-            Ok(body) => match serde_json::from_str::<UserInfo>(&body) {
-                Ok(mut info) => {
-                    info.sanitize();
-
+            Ok(body) => match serde_json::from_str::<APIResponse>(&body) {
+                Ok(info) => {
                     let mut lock = user.lock().expect("Unable to lock user in attempt_login");
 
-                    *lock = info;
+                    lock.uid = info.uid;
+                    lock.display_name = info.display_name;
+                    lock.connect_code = info.connect_code;
+                    lock.latest_version = info.latest_version;
+                    lock.chat_messages = Some(info.chat_messages);
+
+                    (*lock).sanitize();
                 },
 
                 Err(error) => {

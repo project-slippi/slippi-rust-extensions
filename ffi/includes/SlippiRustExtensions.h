@@ -27,13 +27,22 @@ struct EXIDeviceConfig {
 /// An intermediary type for moving `UserInfo` across the FFI boundary.
 ///
 /// This type is C compatible, and we coerce Rust types into C types for this struct to
-/// ease passing things over.
+/// ease passing things over. This must be free'd on the Rust side via `slprs_user_free_info`.
 struct RustUserInfo {
   const char *uid;
   const char *play_key;
   const char *display_name;
   const char *connect_code;
   const char *latest_version;
+};
+
+/// An intermediary type for moving chat messages across the FFI boundary.
+///
+/// This type is C compatible, and we coerce Rust types into C types for this struct to
+/// ease passing things over. This must be free'd on the Rust side via `slprs_user_free_messages`.
+struct RustChatMessages {
+  char **data;
+  int len;
 };
 
 extern "C" {
@@ -220,5 +229,19 @@ RustUserInfo *slprs_user_get_info(uintptr_t exi_device_instance_ptr);
 /// to ensure that the memory layout matches - do _not_ call `free` on `UserInfo`, pass it here
 /// instead.
 void slprs_user_free_info(RustUserInfo *ptr);
+
+/// Returns a C-compatible struct containing the chat message options for the current user.
+///
+/// The return value of this _must_ be passed back to `slprs_user_free_messages` to free memory.
+RustChatMessages *slprs_user_get_messages(uintptr_t exi_device_instance_ptr);
+
+/// Returns a C-compatible struct containing the default chat message options.
+///
+/// The return value of this _must_ be passed back to `slprs_user_free_messages` to free memory.
+RustChatMessages *slprs_user_get_default_messages(uintptr_t exi_device_instance_ptr);
+
+/// Takes back ownership of a `RustChatMessages` instance and frees the underlying data
+/// by converting it into the proper Rust types.
+void slprs_user_free_messages(RustChatMessages *ptr);
 
 } // extern "C"

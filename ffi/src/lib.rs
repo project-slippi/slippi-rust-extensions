@@ -13,7 +13,7 @@ pub mod logger;
 pub mod user;
 
 /// A small helper method for moving in and out of our known types.
-pub(crate) fn set<T, F>(instance_ptr: usize, handler: F)
+pub(crate) fn with<T, F>(instance_ptr: usize, handler: F)
 where
     F: FnOnce(&mut T),
 {
@@ -29,6 +29,29 @@ where
 
     // Fall back into a raw pointer so Rust doesn't obliterate the object.
     let _leak = Box::into_raw(instance);
+}
+
+/// A small helper method for moving in and out of our known types.
+///
+/// This variant can be used to return a value from within a handler.
+pub(crate) fn with_returning<T, F, R>(instance_ptr: usize, handler: F) -> R
+where
+    F: FnOnce(&mut T) -> R,
+{
+    // This entire method could possibly be a macro but I'm way too tired
+    // to deal with that syntax right now.
+
+    // Coerce the instance from the pointer. This is theoretically safe since we control
+    // the C++ side and can guarantee that the `instance_ptr` is only owned
+    // by us, and is created/destroyed with the corresponding lifetimes.
+    let mut instance = unsafe { Box::from_raw(instance_ptr as *mut T) };
+
+    let ret = handler(&mut instance);
+
+    // Fall back into a raw pointer so Rust doesn't obliterate the object.
+    let _leak = Box::into_raw(instance);
+
+    ret
 }
 
 /// A helper function for converting c str types to Rust ones with

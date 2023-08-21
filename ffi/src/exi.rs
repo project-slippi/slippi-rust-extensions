@@ -6,19 +6,6 @@ use slippi_game_reporter::GameReport;
 
 use crate::c_str_to_string;
 
-/// Fuck.
-#[repr(C)]
-pub struct EXIDeviceConfig {
-    iso_path: *const c_char,
-    user_folder_path: *const c_char,
-    osd_add_msg_fn: unsafe extern "C" fn(*const c_char, u32, u32),
-}
-
-#[no_mangle]
-pub extern "C" fn slprs_lol(_config: EXIDeviceConfig) -> usize {
-    0
-}
-
 /// Creates and leaks a shadow EXI device.
 ///
 /// The C++ (Dolphin) side of things should call this and pass the appropriate arguments. At
