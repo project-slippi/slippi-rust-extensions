@@ -1,11 +1,6 @@
 use std::sync::OnceLock;
 use std::env;
 
-#[allow(unused_imports)]
-use std::fs;
-#[allow(unused_imports)]
-use std::path::PathBuf;
-
 mod development;
 mod production;
 
@@ -31,21 +26,6 @@ impl SlippiConfig {
         }
     }
 
-    #[cfg(feature = "slippi_env_file")]
-    fn read_file_config(env: &str) -> SlippiConfig {
-        let path = PathBuf::from(file!())
-            .parent().unwrap()
-            .join("envs")
-            .join(format!("{}.toml", env));
-
-        println!("{:?}", path.display());
-        // Read the file content
-        let contents = fs::read_to_string(&path).expect(format!("Unable to read the file {}", path.display()).as_str());
-        // Deserialize the TOML contents into the struct
-        let config: Self = toml::from_str(contents.as_str()).expect("Failed to parse TOML");
-        config
-    }
-
     #[cfg(feature = "slippi_env_development")]
     fn read_file_config(_env: &str) -> SlippiConfig {
         SlippiConfig::development()
@@ -61,6 +41,7 @@ impl SlippiConfig {
         let config: Self = Self::read_file_config(env);
         // Merge with default values
         let merged_config = Self::default().merge(config);
+        tracing::warn!("SlippiRustExtensions Config {:?} Environment {}", &merged_config, SlippiConfig::get_env());
         _SLP_CFG.set(merged_config).expect("Could not initialize Config!");
     }
 
