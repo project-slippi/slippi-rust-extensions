@@ -11,7 +11,7 @@ edition = "2021"
 publish = false
 
 [features]
-default = ["slippi_env_development"]
+default = []
 slippi_env_development = []
 slippi_env_production = []
 ishiiruka = []
