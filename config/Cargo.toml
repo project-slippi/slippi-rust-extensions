@@ -6,13 +6,17 @@ authors = [
     "Slippi Team",
     "Robert Peralta <rapito@gmail.com>"
 ]
+build = "build.rs"
 edition = "2021"
 publish = false
 
 [features]
-default = []
+default = ["slippi_env_development"]
+slippi_env_file = []
+slippi_env_development = []
+slippi_env_production = []
 ishiiruka = []
-mainline = []
+playback = []
 
 [dependencies]
 serde = { workspace = true }
