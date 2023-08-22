@@ -14,7 +14,7 @@ pub use errors::JukeboxError;
 use JukeboxError::*;
 
 mod disc;
-use disc::{get_iso_kind, get_real_offset, IsoKind};
+use disc::{get_iso_kind, IsoKind};
 
 mod utils;
 use utils::copy_bytes_from_file;
@@ -89,6 +89,7 @@ impl Jukebox {
         let sink = Sink::try_new(&stream_handle)?;
 
         let mut iso = File::open(&iso_path)?;
+        let get_real_offset = disc::create_offset_locator_fn(&mut iso)?;
 
         let mut melee_music_volume = 1.0;
         let mut dolphin_system_volume = (initial_dolphin_system_volume as f32 / 100.0).clamp(0.0, 1.0);
@@ -101,7 +102,7 @@ impl Jukebox {
                     sink.stop();
 
                     // Get the _real_ offset of the hps file on the iso
-                    let real_hps_offset = match get_real_offset(&mut iso, hps_offset)? {
+                    let real_hps_offset = match get_real_offset(hps_offset) {
                         Some(offset) => offset,
                         None => {
                             tracing::warn!(
