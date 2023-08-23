@@ -1,7 +1,7 @@
 use std::ffi::c_char;
 
 use dolphin_integrations::Log;
-use slippi_exi_device::{Config, FilePathsConfig, SCMConfig, JukeboxConfiguration, SlippiEXIDevice};
+use slippi_exi_device::{Config, FilePathsConfig, JukeboxConfiguration, SCMConfig, SlippiEXIDevice};
 use slippi_game_reporter::GameReport;
 
 use crate::c_str_to_string;
