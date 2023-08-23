@@ -6,6 +6,32 @@ use slippi_game_reporter::GameReport;
 
 use crate::c_str_to_string;
 
+/// A configuration struct for passing over certain argument types from the C/C++ side.
+///
+/// The number of arguments necessary to shuttle across the FFI boundary when starting the
+/// EXI device is higher than ideal at the moment, though it should lessen with time. For now,
+/// this struct exists to act as a slightly more sane approach to readability of the args
+/// structure.
+#[repr(C)]
+pub struct SlippiEXIConfig {
+    // Paths
+    pub iso_path: *const c_char,
+    pub user_folder_path: *const c_char,
+
+    // Git version number
+    pub scm_desc_str: *const c_char,
+    pub scm_branch_str: *const c_char,
+    pub scm_rev_str: *const c_char,
+    pub scm_slippi_semver_str: *const c_char,
+    pub scm_rev_git_str: *const c_char,
+    pub scm_rev_cache_str: *const c_char,
+    pub netplay_dolphin_ver: *const c_char,
+    pub scm_distributor_str: *const c_char,
+
+    // Hooks
+    pub osd_add_msg_fn: unsafe extern "C" fn(*const c_char, u32, u32),
+}
+
 /// Creates and leaks a shadow EXI device.
 ///
 /// The C++ (Dolphin) side of things should call this and pass the appropriate arguments. At
@@ -14,17 +40,13 @@ use crate::c_str_to_string;
 ///
 /// The returned pointer from this should *not* be used after calling `slprs_exi_device_destroy`.
 #[no_mangle]
-pub extern "C" fn slprs_exi_device_create(
-    iso_path: *const c_char,
-    user_folder_path: *const c_char,
-    osd_add_msg_fn: unsafe extern "C" fn(*const c_char, u32, u32),
-) -> usize {
+pub extern "C" fn slprs_exi_device_create(config: SlippiEXIConfig) -> usize {
     let fn_name = "slprs_exi_device_create";
 
-    let iso_path = c_str_to_string(iso_path, fn_name, "iso_path");
-    let user_folder_path = c_str_to_string(user_folder_path, fn_name, "user_folder_path");
+    let iso_path = c_str_to_string(config.iso_path, fn_name, "iso_path");
+    let user_folder_path = c_str_to_string(config.user_folder_path, fn_name, "user_folder_path");
 
-    dolphin_integrations::ffi::osd::set_global_hook(osd_add_msg_fn);
+    dolphin_integrations::ffi::osd::set_global_hook(config.osd_add_msg_fn);
 
     let exi_device = Box::new(SlippiEXIDevice::new(iso_path, user_folder_path));
     let exi_device_instance_ptr = Box::into_raw(exi_device) as usize;

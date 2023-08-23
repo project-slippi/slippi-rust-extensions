@@ -17,6 +17,26 @@ enum SlippiMatchmakingOnlinePlayMode {
   Teams = 3,
 };
 
+/// A configuration struct for passing over certain argument types from the C/C++ side.
+///
+/// The number of arguments necessary to shuttle across the FFI boundary when starting the
+/// EXI device is higher than ideal at the moment, though it should lessen with time. For now,
+/// this struct exists to act as a slightly more sane approach to readability of the args
+/// structure.
+struct SlippiEXIConfig {
+  const char *iso_path;
+  const char *user_folder_path;
+  const char *scm_desc_str;
+  const char *scm_branch_str;
+  const char *scm_rev_str;
+  const char *scm_slippi_semver_str;
+  const char *scm_rev_git_str;
+  const char *scm_rev_cache_str;
+  const char *netplay_dolphin_ver;
+  const char *scm_distributor_str;
+  void (*osd_add_msg_fn)(const char*, uint32_t, uint32_t);
+};
+
 /// An intermediary type for moving `UserInfo` across the FFI boundary.
 ///
 /// This type is C compatible, and we coerce Rust types into C types for this struct to
@@ -47,9 +67,7 @@ extern "C" {
 /// down (at whatever point) via the corresponding `slprs_exi_device_destroy` function.
 ///
 /// The returned pointer from this should *not* be used after calling `slprs_exi_device_destroy`.
-uintptr_t slprs_exi_device_create(const char *iso_path,
-                                  const char *user_folder_path,
-                                  void (*osd_add_msg_fn)(const char*, uint32_t, uint32_t));
+uintptr_t slprs_exi_device_create(SlippiEXIConfig config);
 
 /// The C++ (Dolphin) side of things should call this to notify the Rust side that it
 /// can safely shut down and clean up.
