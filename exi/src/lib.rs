@@ -23,7 +23,15 @@ pub struct SlippiEXIDevice {
     config: Config,
     pub game_reporter: GameReporter,
     pub user_manager: UserManager,
-    jukebox: Option<Jukebox>,
+    pub jukebox: Option<Jukebox>,
+}
+
+pub enum JukeboxConfiguration {
+    Start {
+        initial_dolphin_system_volume: u8,
+        initial_dolphin_music_volume: u8,
+    },
+    Stop,
 }
 
 impl SlippiEXIDevice {
@@ -70,46 +78,37 @@ impl SlippiEXIDevice {
     pub fn dma_read(&mut self, _address: usize, _size: usize) {}
 
     /// Configures a new Jukebox, or ensures an existing one is dropped if it's being disabled.
-    pub fn configure_jukebox(&mut self, is_enabled: bool, get_dolphin_volume_fn: slippi_jukebox::ForeignGetVolumeFn) {
-        if !is_enabled {
+    pub fn configure_jukebox(&mut self, config: JukeboxConfiguration) {
+        if let JukeboxConfiguration::Stop = config {
             self.jukebox = None;
             return;
         }
 
-        match Jukebox::new(self.config.paths.iso.clone(), get_dolphin_volume_fn) {
-            Ok(jukebox) => {
-                self.jukebox = Some(jukebox);
-            },
-
-            Err(e) => tracing::error!(
-                target: Log::EXI,
-                error = ?e,
-                "Failed to start Jukebox"
-            ),
+        if self.jukebox.is_some() {
+            tracing::warn!(target: Log::EXI, "Jukebox is already active");
+            return;
         }
-    }
 
-    pub fn jukebox_play_music(&mut self, hps_offset: u64, hps_length: usize) {
-        if let Some(jukebox) = self.jukebox.as_mut() {
-            if let Err(e) = jukebox.play_music(hps_offset, hps_length) {
-                tracing::error!(
+        if let JukeboxConfiguration::Start {
+            initial_dolphin_system_volume,
+            initial_dolphin_music_volume,
+        } = config
+        {
+            match Jukebox::new(
+                self.config.paths.iso.clone(),
+                initial_dolphin_system_volume,
+                initial_dolphin_music_volume,
+            ) {
+                Ok(jukebox) => {
+                    self.jukebox = Some(jukebox);
+                },
+
+                Err(e) => tracing::error!(
                     target: Log::EXI,
                     error = ?e,
-                    "Failed to play jukebox song music"
-                )
+                    "Failed to start Jukebox"
+                ),
             }
-        }
-    }
-
-    pub fn jukebox_stop_music(&mut self) {
-        if let Some(jukebox) = self.jukebox.as_mut() {
-            jukebox.stop_music();
-        }
-    }
-
-    pub fn jukebox_set_music_volume(&mut self, volume: u8) {
-        if let Some(jukebox) = self.jukebox.as_mut() {
-            jukebox.set_music_volume(volume);
         }
     }
 }

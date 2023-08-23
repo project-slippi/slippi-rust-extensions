@@ -54,4 +54,4 @@ jobs:
           sudo apt install \
           libasound2-dev
       - name: "Run cargo test"
-        run: cargo test --all --all-features
+        run: cargo test --all --all-features --release

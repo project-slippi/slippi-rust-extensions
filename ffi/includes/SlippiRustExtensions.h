@@ -112,15 +112,8 @@ void slprs_exi_device_reporter_push_replay_data(uintptr_t instance_ptr,
 /// the road though and is not set in stone.
 void slprs_exi_device_configure_jukebox(uintptr_t exi_device_instance_ptr,
                                         bool is_enabled,
-                                        int (*get_dolphin_volume_fn)());
-
-void slprs_exi_device_jukebox_play_music(uintptr_t exi_device_instance_ptr,
-                                         uint64_t hps_offset,
-                                         uintptr_t hps_length);
-
-void slprs_exi_device_jukebox_stop_music(uintptr_t exi_device_instance_ptr);
-
-void slprs_exi_device_jukebox_set_music_volume(uintptr_t exi_device_instance_ptr, uint8_t volume);
+                                        uint8_t initial_dolphin_system_volume,
+                                        uint8_t initial_dolphin_music_volume);
 
 /// Creates a new Player Report and leaks it, returning the pointer.
 ///
@@ -155,6 +148,23 @@ uintptr_t slprs_game_report_create(const char *uid,
 /// `GameReport` at the corresponding pointer.
 void slprs_game_report_add_player_report(uintptr_t instance_ptr,
                                          uintptr_t player_report_instance_ptr);
+
+/// Calls through to `Jukebox::start_song`.
+void slprs_jukebox_start_song(uintptr_t exi_device_instance_ptr,
+                              uint64_t hps_offset,
+                              uintptr_t hps_length);
+
+/// Calls through to `Jukebox::stop_music`.
+void slprs_jukebox_stop_music(uintptr_t exi_device_instance_ptr);
+
+/// Calls through to `Jukebox::set_volume` with the Melee volume control.
+void slprs_jukebox_set_melee_music_volume(uintptr_t exi_device_instance_ptr, uint8_t volume);
+
+/// Calls through to `Jukebox::set_volume` with the DolphinSystem volume control.
+void slprs_jukebox_set_dolphin_system_volume(uintptr_t exi_device_instance_ptr, uint8_t volume);
+
+/// Calls through to `Jukebox::set_volume` with the DolphinMusic volume control.
+void slprs_jukebox_set_dolphin_music_volume(uintptr_t exi_device_instance_ptr, uint8_t volume);
 
 /// This should be called from the Dolphin LogManager initialization to ensure that
 /// all logging needs on the Rust side are configured appropriately.
