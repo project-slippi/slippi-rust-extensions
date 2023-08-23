@@ -103,7 +103,7 @@ impl UserManager {
     /// use slippi_user::UserManager;
     ///
     /// fn inspect(manager: UserManager) {
-    ///     let uid = manager.get(|user| user.uid);
+    ///     let uid = manager.get(|user| user.uid.clone());
     ///     println!("User ID: {}", uid);
     /// }
     /// ```
@@ -129,7 +129,7 @@ impl UserManager {
     ///     })
     /// }
     /// ```
-    fn set<F>(&self, handler: F)
+    pub fn set<F>(&self, handler: F)
     where
         F: FnOnce(&mut UserInfo),
     {
