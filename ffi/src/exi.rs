@@ -1,7 +1,7 @@
 use std::ffi::{c_char, c_int};
 
 use dolphin_integrations::Log;
-use slippi_exi_device::SlippiEXIDevice;
+use slippi_exi_device::{Config, FilePathsConfig, SCMConfig, SlippiEXIDevice};
 use slippi_game_reporter::GameReport;
 
 use crate::c_str_to_string;
@@ -13,26 +13,30 @@ use crate::c_str_to_string;
 /// this struct exists to act as a slightly more sane approach to readability of the args
 /// structure.
 #[repr(C)]
-pub struct SlippiEXIConfig {
+pub struct SlippiRustEXIConfig {
     // Paths
     pub iso_path: *const c_char,
-    pub user_folder_path: *const c_char,
+    pub user_json_path: *const c_char,
 
     // Git version number
-    pub scm_desc_str: *const c_char,
-    pub scm_branch_str: *const c_char,
-    pub scm_rev_str: *const c_char,
     pub scm_slippi_semver_str: *const c_char,
-    pub scm_rev_git_str: *const c_char,
-    pub scm_rev_cache_str: *const c_char,
-    pub netplay_dolphin_ver: *const c_char,
-    pub scm_distributor_str: *const c_char,
+
+    // We don't currently need the below, but they're stubbed in case anyone ends up
+    // needing to add 'em.
+    //
+    // pub scm_desc_str: *const c_char,
+    // pub scm_branch_str: *const c_char,
+    // pub scm_rev_str: *const c_char,
+    // pub scm_rev_git_str: *const c_char,
+    // pub scm_rev_cache_str: *const c_char,
+    // pub netplay_dolphin_ver: *const c_char,
+    // pub scm_distributor_str: *const c_char,
 
     // Hooks
     pub osd_add_msg_fn: unsafe extern "C" fn(*const c_char, u32, u32),
 }
 
-/// Creates and leaks a shadow EXI device.
+/// Creates and leaks a shadow EXI device with the provided configuration.
 ///
 /// The C++ (Dolphin) side of things should call this and pass the appropriate arguments. At
 /// that point, everything on the Rust side is its own universe, and should be told to shut
@@ -40,15 +44,22 @@ pub struct SlippiEXIConfig {
 ///
 /// The returned pointer from this should *not* be used after calling `slprs_exi_device_destroy`.
 #[no_mangle]
-pub extern "C" fn slprs_exi_device_create(config: SlippiEXIConfig) -> usize {
-    let fn_name = "slprs_exi_device_create";
-
-    let iso_path = c_str_to_string(config.iso_path, fn_name, "iso_path");
-    let user_folder_path = c_str_to_string(config.user_folder_path, fn_name, "user_folder_path");
-
+pub extern "C" fn slprs_exi_device_create(config: SlippiRustEXIConfig) -> usize {
     dolphin_integrations::ffi::osd::set_global_hook(config.osd_add_msg_fn);
 
-    let exi_device = Box::new(SlippiEXIDevice::new(iso_path, user_folder_path));
+    let fn_name = "slprs_exi_device_create";
+
+    let exi_device = Box::new(SlippiEXIDevice::new(Config {
+        paths: FilePathsConfig {
+            iso: c_str_to_string(config.iso_path, fn_name, "iso_path"),
+            user_json: c_str_to_string(config.user_json_path, fn_name, "user_json"),
+        },
+
+        scm: SCMConfig {
+            slippi_semver: c_str_to_string(config.scm_slippi_semver_str, fn_name, "slippi_semver"),
+        },
+    }));
+
     let exi_device_instance_ptr = Box::into_raw(exi_device) as usize;
 
     tracing::warn!(target: Log::EXI, ptr = exi_device_instance_ptr, "Creating Device");

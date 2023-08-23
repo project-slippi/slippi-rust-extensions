@@ -61,6 +61,7 @@ pub struct UserManager {
     http_client: Agent,
     user: Arc<Mutex<UserInfo>>,
     user_json_path: Arc<PathBuf>,
+    slippi_semver: String,
     watcher: Arc<Mutex<UserInfoWatcher>>,
 }
 
@@ -71,7 +72,9 @@ impl UserManager {
     /// live. This is an OS-specific value and we currently need to share it with Dolphin,
     /// so this should be passed via the FFI layer. In the future, we may be able to remove
     /// this restriction via some assumptions.
-    pub fn new(http_client: Agent, user_json_path: PathBuf) -> Self {
+    // @TODO: The semver param here should get refactored away in time once we've ironed out
+    // how some things get persisted from the Dolphin side. Not a big deal to thread it for now.
+    pub fn new(http_client: Agent, user_json_path: PathBuf, slippi_semver: String) -> Self {
         let user = Arc::new(Mutex::new(UserInfo::default()));
         let user_json_path = Arc::new(user_json_path);
         let watcher = Arc::new(Mutex::new(UserInfoWatcher::new()));
@@ -80,6 +83,7 @@ impl UserManager {
             http_client,
             user,
             user_json_path,
+            slippi_semver,
             watcher,
         }
     }
@@ -137,14 +141,19 @@ impl UserManager {
     /// Runs the `attempt_login` function on the calling thread. If you need this to run in the
     /// background, you want `watch_for_login` instead.
     pub fn attempt_login(&self) -> bool {
-        attempt_login(&self.http_client, &self.user, &self.user_json_path)
+        attempt_login(&self.http_client, &self.user, &self.user_json_path, &self.slippi_semver)
     }
 
     /// Kicks off a background handler for processing user authentication.
     pub fn watch_for_login(&self) {
         let mut watcher = self.watcher.lock().expect("Unable to acquire user watcher lock");
 
-        watcher.watch_for_login(self.http_client.clone(), self.user_json_path.clone(), self.user.clone());
+        watcher.watch_for_login(
+            self.http_client.clone(),
+            self.user_json_path.clone(),
+            self.user.clone(),
+            &self.slippi_semver,
+        );
     }
 
     /// Pops open a browser window for the older authentication flow. This is less encountered by
@@ -209,7 +218,7 @@ impl UserManager {
 /// Checks for the existence of a `user.json` file and, if found, attempts to load and parse it.
 ///
 /// This returns a `bool` value so that the background thread can know whether to stop checking.
-fn attempt_login(http_client: &Agent, user: &Arc<Mutex<UserInfo>>, user_json_path: &PathBuf) -> bool {
+fn attempt_login(http_client: &Agent, user: &Arc<Mutex<UserInfo>>, user_json_path: &PathBuf, slippi_semver: &str) -> bool {
     match std::fs::read_to_string(user_json_path) {
         Ok(contents) => match serde_json::from_str::<UserInfo>(&contents) {
             Ok(mut info) => {
@@ -222,7 +231,7 @@ fn attempt_login(http_client: &Agent, user: &Arc<Mutex<UserInfo>>, user_json_pat
                     *lock = info;
                 }
 
-                overwrite_from_server(http_client, user, uid);
+                overwrite_from_server(http_client, user, uid, slippi_semver);
                 return true;
             },
 
@@ -264,8 +273,11 @@ pub struct APIResponse {
 
 /// Calls out to the Slippi server and fetches the user info, patching up the user info object
 /// with any returned information.
-fn overwrite_from_server(http_client: &Agent, user: &Arc<Mutex<UserInfo>>, uid: String) {
-    let is_beta = "";
+fn overwrite_from_server(http_client: &Agent, user: &Arc<Mutex<UserInfo>>, uid: String, slippi_semver: &str) {
+    let is_beta = match slippi_semver.contains("beta") {
+        true => "-beta",
+        false => "",
+    };
 
     let url = format!("{USER_API_URL}{is_beta}/{uid}?additionalFields=chatMessages");
 

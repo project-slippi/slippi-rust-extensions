@@ -26,7 +26,13 @@ impl UserInfoWatcher {
     }
 
     /// Spins up (or re-spins-up) the background watcher thread for the `user.json` file.
-    pub fn watch_for_login(&mut self, http_client: Agent, user_json_path: Arc<PathBuf>, user: Arc<Mutex<UserInfo>>) {
+    pub fn watch_for_login(
+        &mut self,
+        http_client: Agent,
+        user_json_path: Arc<PathBuf>,
+        user: Arc<Mutex<UserInfo>>,
+        slippi_semver: &str,
+    ) {
         // If we're already watching, no-op out.
         if self.should_watch.load(Ordering::Relaxed) {
             return;
@@ -39,6 +45,9 @@ impl UserInfoWatcher {
         let should_watch = self.should_watch.clone();
         should_watch.store(true, Ordering::Relaxed);
 
+        // Create an owned String once we know we're actually launching the thread.
+        let slippi_semver = slippi_semver.to_string();
+
         let watcher_thread = thread::Builder::new()
             .name("SlippiUserJSONWatcherThread".into())
             .spawn(move || loop {
@@ -46,7 +55,7 @@ impl UserInfoWatcher {
                     return;
                 }
 
-                if attempt_login(&http_client, &user, &user_json_path) {
+                if attempt_login(&http_client, &user, &user_json_path, &slippi_semver) {
                     return;
                 }
 

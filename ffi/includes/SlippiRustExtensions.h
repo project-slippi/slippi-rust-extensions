@@ -23,17 +23,10 @@ enum SlippiMatchmakingOnlinePlayMode {
 /// EXI device is higher than ideal at the moment, though it should lessen with time. For now,
 /// this struct exists to act as a slightly more sane approach to readability of the args
 /// structure.
-struct SlippiEXIConfig {
+struct SlippiRustEXIConfig {
   const char *iso_path;
-  const char *user_folder_path;
-  const char *scm_desc_str;
-  const char *scm_branch_str;
-  const char *scm_rev_str;
+  const char *user_json_path;
   const char *scm_slippi_semver_str;
-  const char *scm_rev_git_str;
-  const char *scm_rev_cache_str;
-  const char *netplay_dolphin_ver;
-  const char *scm_distributor_str;
   void (*osd_add_msg_fn)(const char*, uint32_t, uint32_t);
 };
 
@@ -60,14 +53,14 @@ struct RustChatMessages {
 
 extern "C" {
 
-/// Creates and leaks a shadow EXI device.
+/// Creates and leaks a shadow EXI device with the provided configuration.
 ///
 /// The C++ (Dolphin) side of things should call this and pass the appropriate arguments. At
 /// that point, everything on the Rust side is its own universe, and should be told to shut
 /// down (at whatever point) via the corresponding `slprs_exi_device_destroy` function.
 ///
 /// The returned pointer from this should *not* be used after calling `slprs_exi_device_destroy`.
-uintptr_t slprs_exi_device_create(SlippiEXIConfig config);
+uintptr_t slprs_exi_device_create(SlippiRustEXIConfig config);
 
 /// The C++ (Dolphin) side of things should call this to notify the Rust side that it
 /// can safely shut down and clean up.

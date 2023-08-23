@@ -14,10 +14,13 @@ use slippi_game_reporter::GameReporter;
 use slippi_jukebox::Jukebox;
 use slippi_user::UserManager;
 
+mod config;
+pub use config::{Config, FilePathsConfig, SCMConfig};
+
 /// An EXI Device subclass specific to managing and interacting with the game itself.
 #[derive(Debug)]
 pub struct SlippiEXIDevice {
-    iso_path: String,
+    config: Config,
     pub game_reporter: GameReporter,
     pub user_manager: UserManager,
     jukebox: Option<Jukebox>,
@@ -27,7 +30,7 @@ impl SlippiEXIDevice {
     /// Creates and returns a new `SlippiEXIDevice` with default values.
     ///
     /// At the moment you should never need to call this yourself.
-    pub fn new(iso_path: String, user_folder_path: String) -> Self {
+    pub fn new(config: Config) -> Self {
         tracing::info!(target: Log::EXI, "Starting SlippiEXIDevice");
 
         // We set `max_idle_connections` to `5` to mimic how CURL was configured in
@@ -36,12 +39,16 @@ impl SlippiEXIDevice {
         let http_client = AgentBuilder::new()
             .max_idle_connections(5)
             .timeout(Duration::from_millis(5000))
-            .user_agent("SlippiEXIDevice/Rust v0.1")
+            .user_agent(&format!("SlippiDolphin/{} (Rust)", config.scm.slippi_semver))
             .build();
 
-        let user_manager = UserManager::new(http_client.clone(), user_folder_path.into());
+        let user_manager = UserManager::new(
+            http_client.clone(),
+            config.paths.user_json.clone().into(),
+            config.scm.slippi_semver.clone(),
+        );
 
-        let game_reporter = GameReporter::new(http_client.clone(), user_manager.clone(), iso_path.clone());
+        let game_reporter = GameReporter::new(http_client.clone(), user_manager.clone(), config.paths.iso.clone());
 
         // Playback has no need to deal with this.
         // (We could maybe silo more?)
@@ -49,7 +56,7 @@ impl SlippiEXIDevice {
         user_manager.watch_for_login();
 
         Self {
-            iso_path,
+            config,
             game_reporter,
             user_manager,
             jukebox: None,
@@ -69,7 +76,7 @@ impl SlippiEXIDevice {
             return;
         }
 
-        match Jukebox::new(self.iso_path.clone(), get_dolphin_volume_fn) {
+        match Jukebox::new(self.config.paths.iso.clone(), get_dolphin_volume_fn) {
             Ok(jukebox) => {
                 self.jukebox = Some(jukebox);
             },
