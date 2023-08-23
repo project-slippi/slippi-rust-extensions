@@ -17,13 +17,6 @@ enum SlippiMatchmakingOnlinePlayMode {
   Teams = 3,
 };
 
-/// Fuck.
-struct EXIDeviceConfig {
-  const char *iso_path;
-  const char *user_folder_path;
-  void (*osd_add_msg_fn)(const char*, uint32_t, uint32_t);
-};
-
 /// An intermediary type for moving `UserInfo` across the FFI boundary.
 ///
 /// This type is C compatible, and we coerce Rust types into C types for this struct to
@@ -46,8 +39,6 @@ struct RustChatMessages {
 };
 
 extern "C" {
-
-uintptr_t slprs_lol(EXIDeviceConfig _config);
 
 /// Creates and leaks a shadow EXI device.
 ///

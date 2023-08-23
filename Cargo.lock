@@ -1185,6 +1185,7 @@ dependencies = [
  "slippi-jukebox",
  "slippi-user",
  "tracing",
+ "ureq",
 ]
 
 [[package]]

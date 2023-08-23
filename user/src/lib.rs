@@ -2,15 +2,17 @@
 //! from within Slippi Dolphin.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::Duration;
+
+use ureq::Agent;
 
 // use dolphin_integrations::Log;
 
 mod chat;
 pub use chat::DEFAULT_CHAT_MESSAGES;
+
+mod watcher;
+use watcher::UserInfoWatcher;
 
 const USER_API_URL: &'static str = "https://users-rest-dot-slippi.uc.r.appspot.com/user";
 
@@ -56,6 +58,7 @@ impl UserInfo {
 /// where this stuff is called into from the C++ side.
 #[derive(Clone, Debug)]
 pub struct UserManager {
+    http_client: Agent,
     user: Arc<Mutex<UserInfo>>,
     user_json_path: Arc<PathBuf>,
     watcher: Arc<Mutex<UserInfoWatcher>>,
@@ -68,12 +71,13 @@ impl UserManager {
     /// live. This is an OS-specific value and we currently need to share it with Dolphin,
     /// so this should be passed via the FFI layer. In the future, we may be able to remove
     /// this restriction via some assumptions.
-    pub fn new(user_json_path: PathBuf) -> Self {
+    pub fn new(http_client: Agent, user_json_path: PathBuf) -> Self {
         let user = Arc::new(Mutex::new(UserInfo::default()));
         let user_json_path = Arc::new(user_json_path);
         let watcher = Arc::new(Mutex::new(UserInfoWatcher::new()));
 
         Self {
+            http_client,
             user,
             user_json_path,
             watcher,
@@ -133,14 +137,14 @@ impl UserManager {
     /// Runs the `attempt_login` function on the calling thread. If you need this to run in the
     /// background, you want `watch_for_login` instead.
     pub fn attempt_login(&self) -> bool {
-        attempt_login(&self.user, &self.user_json_path)
+        attempt_login(&self.http_client, &self.user, &self.user_json_path)
     }
 
     /// Kicks off a background handler for processing user authentication.
     pub fn watch_for_login(&self) {
         let mut watcher = self.watcher.lock().expect("Unable to acquire user watcher lock");
 
-        watcher.watch_for_login(self.user_json_path.clone(), self.user.clone());
+        watcher.watch_for_login(self.http_client.clone(), self.user_json_path.clone(), self.user.clone());
     }
 
     /// Pops open a browser window for the older authentication flow. This is less encountered by
@@ -202,82 +206,10 @@ impl UserManager {
     }
 }
 
-/// This type manages access to user information, as well as any background thread watching
-/// for `user.json` file existence.
-#[derive(Debug)]
-pub struct UserInfoWatcher {
-    should_watch: Arc<AtomicBool>,
-    watcher_thread: Option<thread::JoinHandle<()>>,
-}
-
-impl UserInfoWatcher {
-    /// Initializes a new `UserInfoWatcher`. Call `watch_for_login` to kick things off.
-    pub fn new() -> Self {
-        Self {
-            should_watch: Arc::new(AtomicBool::new(false)),
-            watcher_thread: None,
-        }
-    }
-
-    /// Spins up (or re-spins-up) the background watcher thread for the `user.json` file.
-    pub fn watch_for_login(&mut self, user_json_path: Arc<PathBuf>, user: Arc<Mutex<UserInfo>>) {
-        // If we're already watching, no-op out.
-        if self.should_watch.load(Ordering::Relaxed) {
-            return;
-        }
-
-        // Release (join) the existing thread, if we have one.
-        self.release_thread();
-
-        // Start the new thread~
-        let should_watch = self.should_watch.clone();
-        should_watch.store(true, Ordering::Relaxed);
-
-        let watcher_thread = thread::Builder::new()
-            .name("SlippiUserJSONWatcherThread".into())
-            .spawn(move || loop {
-                if !should_watch.load(Ordering::Relaxed) {
-                    return;
-                }
-
-                if attempt_login(&user, &user_json_path) {
-                    return;
-                }
-
-                thread::sleep(Duration::from_millis(500));
-            })
-            .expect("Failed to spawn SlippiUserJSONWatcherThread");
-
-        self.watcher_thread = Some(watcher_thread);
-    }
-
-    /// On logout, we just need to stop the watcher thread. The thread will get
-    /// restarted via some conditions elsewhere.
-    fn logout(&mut self) {
-        self.should_watch.store(false, Ordering::Relaxed);
-    }
-
-    /// Standard logic for popping the thread handle and joining it, logging on failure.
-    fn release_thread(&mut self) {
-        if let Some(watcher_thread) = self.watcher_thread.take() {
-            if let Err(error) = watcher_thread.join() {
-                tracing::error!(?error, "user.json background thread join failure");
-            }
-        }
-    }
-}
-
-impl Drop for UserInfoWatcher {
-    /// Cleans up the background thread that we use for watching `user.json` status.
-    fn drop(&mut self) {
-        self.release_thread();
-    }
-}
-
 /// Checks for the existence of a `user.json` file and, if found, attempts to load and parse it.
 ///
 /// This returns a `bool` value so that the background thread can know whether to stop checking.
-fn attempt_login(user: &Arc<Mutex<UserInfo>>, user_json_path: &PathBuf) -> bool {
+fn attempt_login(http_client: &Agent, user: &Arc<Mutex<UserInfo>>, user_json_path: &PathBuf) -> bool {
     match std::fs::read_to_string(user_json_path) {
         Ok(contents) => match serde_json::from_str::<UserInfo>(&contents) {
             Ok(mut info) => {
@@ -290,7 +222,7 @@ fn attempt_login(user: &Arc<Mutex<UserInfo>>, user_json_path: &PathBuf) -> bool 
                     *lock = info;
                 }
 
-                overwrite_from_server(user, uid);
+                overwrite_from_server(http_client, user, uid);
                 return true;
             },
 
@@ -332,22 +264,14 @@ pub struct APIResponse {
 
 /// Calls out to the Slippi server and fetches the user info, patching up the user info object
 /// with any returned information.
-fn overwrite_from_server(user: &Arc<Mutex<UserInfo>>, uid: String) {
+fn overwrite_from_server(http_client: &Agent, user: &Arc<Mutex<UserInfo>>, uid: String) {
     let is_beta = "";
 
     let url = format!("{USER_API_URL}{is_beta}/{uid}?additionalFields=chatMessages");
 
     tracing::warn!(?url, "Fetching user info");
 
-    // This should eventually migrate up to a utils crate (along with GameReporter's agent), but
-    // it's fine here for testing.
-    let client = ureq::AgentBuilder::new()
-        .user_agent("SlippiUserManager/0.1")
-        .max_idle_connections(5)
-        .timeout(Duration::from_millis(5000))
-        .build();
-
-    match client.get(&url).call() {
+    match http_client.get(&url).call() {
         Ok(response) => match response.into_string() {
             Ok(body) => match serde_json::from_str::<APIResponse>(&body) {
                 Ok(info) => {

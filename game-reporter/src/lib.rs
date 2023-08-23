@@ -5,6 +5,8 @@ use std::ops::Deref;
 use std::sync::mpsc::{self, Sender};
 use std::thread;
 
+use ureq::Agent;
+
 use dolphin_integrations::Log;
 use slippi_user::UserManager;
 
@@ -44,7 +46,7 @@ pub(crate) enum CompletionEvent {
 /// internal Mutexes. We supply a channel to the processing thread in order to notify
 /// it of new reports to process.
 #[derive(Debug)]
-pub struct SlippiGameReporter {
+pub struct GameReporter {
     user_manager: UserManager,
     iso_md5_hasher_thread: Option<thread::JoinHandle<()>>,
     queue_thread: Option<thread::JoinHandle<()>>,
@@ -55,8 +57,8 @@ pub struct SlippiGameReporter {
     replay_data: Vec<u8>,
 }
 
-impl SlippiGameReporter {
-    /// Initializes and returns a new `SlippiGameReporter`.
+impl GameReporter {
+    /// Initializes and returns a new `GameReporter`.
     ///
     /// This spawns and manages a few background threads to handle things like
     /// report and upload processing, along with checking for troublesome ISOs.
@@ -64,39 +66,38 @@ impl SlippiGameReporter {
     ///
     /// Currently, failure to spawn any thread should result in a crash - i.e, if we can't
     /// spawn an OS thread, then there are probably far bigger issues at work here.
-    pub fn new(user_manager: UserManager, iso_path: String) -> Self {
-        let queue = GameReporterQueue::new();
+    pub fn new(http_client: Agent, user_manager: UserManager, iso_path: String) -> Self {
+        let queue = GameReporterQueue::new(http_client.clone());
 
         // This is a thread-safe "one time" setter that the MD5 hasher thread
         // will set when it's done computing.
         let iso_hash_setter = queue.iso_hash.clone();
 
         let iso_md5_hasher_thread = thread::Builder::new()
-            .name("SlippiGameReporterISOHasherThread".into())
+            .name("GameReporterISOHasherThread".into())
             .spawn(move || {
                 iso_md5_hasher::run(iso_hash_setter, iso_path);
             })
-            .expect("Failed to spawn SlippiGameReporterISOHasherThread.");
+            .expect("Failed to spawn GameReporterISOHasherThread.");
 
         let (queue_sender, queue_receiver) = mpsc::channel();
         let queue_thread_queue_handle = queue.clone();
 
         let queue_thread = thread::Builder::new()
-            .name("SlippiGameReporterQueueProcessingThread".into())
+            .name("GameReporterQueueProcessingThread".into())
             .spawn(move || {
                 queue::run(queue_thread_queue_handle, queue_receiver);
             })
-            .expect("Failed to spawn SlippiGameReporterQueueProcessingThread.");
+            .expect("Failed to spawn GameReporterQueueProcessingThread.");
 
         let (completion_sender, completion_receiver) = mpsc::channel();
-        let completion_http_handle = queue.http_client.clone();
 
         let completion_thread = thread::Builder::new()
-            .name("SlippiGameReporterCompletionProcessingThread".into())
+            .name("GameReporterCompletionProcessingThread".into())
             .spawn(move || {
-                queue::run_completion(completion_http_handle, completion_receiver);
+                queue::run_completion(http_client, completion_receiver);
             })
-            .expect("Failed to spawn SlippiGameReporterCompletionProcessingThread.");
+            .expect("Failed to spawn GameReporterCompletionProcessingThread.");
 
         Self {
             user_manager,
@@ -168,7 +169,7 @@ impl SlippiGameReporter {
     }
 }
 
-impl Deref for SlippiGameReporter {
+impl Deref for GameReporter {
     type Target = GameReporterQueue;
 
     /// Support dereferencing to the inner game reporter. This has a "subclass"-like
@@ -178,7 +179,7 @@ impl Deref for SlippiGameReporter {
     }
 }
 
-impl Drop for SlippiGameReporter {
+impl Drop for GameReporter {
     /// Joins the background threads when we're done, logging if
     /// any errors are encountered.
     fn drop(&mut self) {

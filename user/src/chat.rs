@@ -19,7 +19,7 @@ pub const DEFAULT_CHAT_MESSAGES: [&'static str; 16] = [
     "bad connection",
 ];
 
-/// Maps the default chat messages to a `Vec<String>`.
+/// Maps the default chat messages to an owned `Vec<String>`.
 pub fn default() -> Vec<String> {
     DEFAULT_CHAT_MESSAGES.iter().map(|msg| msg.to_string()).collect()
 }
