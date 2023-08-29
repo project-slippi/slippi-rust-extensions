@@ -235,12 +235,14 @@ fn attempt_login(http_client: &Agent, user: &Arc<Mutex<UserInfo>>, user_json_pat
                 return true;
             },
 
+            // JSON parsing error
             Err(error) => {
                 tracing::error!(?error, "Unable to parse user.json");
                 return false;
             },
         },
 
+        // Filesystem I/O error
         Err(error) => {
             // A not-found file just means they haven't logged in yet... presumably.
             if error.kind() != std::io::ErrorKind::NotFound {
@@ -255,7 +257,7 @@ fn attempt_login(http_client: &Agent, user: &Arc<Mutex<UserInfo>>, user_json_pat
 /// The core payload that represents user information. This type is expected to conform
 /// to the same definition that the remote server uses.
 #[derive(Debug, Default, serde::Deserialize)]
-pub struct APIResponse {
+struct UserInfoAPIResponse {
     pub uid: String,
 
     #[serde(alias = "displayName")]
@@ -279,13 +281,14 @@ fn overwrite_from_server(http_client: &Agent, user: &Arc<Mutex<UserInfo>>, uid: 
         false => "",
     };
 
+    // @TODO: Switch this to a GraphQL call? Likely a Fizzi/Nikki task.
     let url = format!("{USER_API_URL}{is_beta}/{uid}?additionalFields=chatMessages");
 
     tracing::warn!(?url, "Fetching user info");
 
     match http_client.get(&url).call() {
         Ok(response) => match response.into_string() {
-            Ok(body) => match serde_json::from_str::<APIResponse>(&body) {
+            Ok(body) => match serde_json::from_str::<UserInfoAPIResponse>(&body) {
                 Ok(info) => {
                     let mut lock = user.lock().expect("Unable to lock user in attempt_login");
 
