@@ -22,9 +22,6 @@ members = [
 debug = true
 panic = "abort"
 
-[patch.crates-io]
-cpal = { git = "https://github.com/project-slippi/cpal.git" }
-
 [workspace.dependencies]
 time = { version = "0.3.20", default-features = false, features = ["std", "local-offset"] }
 serde = { version = "1", features = ["derive"] }
@@ -36,3 +33,15 @@ serde_repr = { version = "0.1" }
 tracing = { version = "0.1", default-features = false, features = ["std"] }
 
 ureq = { version = "2.7.1", features = ["json"] }
+
+[patch.crates-io]
+# We need to patch this dependency to fix a bug in Windows where a crash can occur
+# due to a lurking `assert` in cpal's wasapi device handling. This can be removed once
+# the fix is merged upstream.
+#
+# See the following links for more info:
+#
+#   - https://github.com/RustAudio/cpal/issues/796
+#   - https://github.com/project-slippi/cpal/commit/b0058fc99e324e919cba099077f43db90ddada94
+# 
+cpal = { git = "https://github.com/project-slippi/cpal.git" }
