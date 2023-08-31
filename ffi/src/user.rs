@@ -1,6 +1,5 @@
 use std::ffi::{c_char, c_int, CString};
 
-// use dolphin_integrations::Log;
 use slippi_exi_device::SlippiEXIDevice;
 
 use crate::{c_str_to_string, with, with_returning};

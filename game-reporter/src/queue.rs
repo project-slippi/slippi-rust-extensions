@@ -66,7 +66,7 @@ impl GameReporterQueue {
 
             Err(error) => {
                 // This should never happen.
-                tracing::error!(target: Log::GameReporter, ?error, "Unable to lock queue, dropping report");
+                tracing::error!(target: Log::Slippi, ?error, "Unable to lock queue, dropping report");
             },
         }
     }
@@ -94,10 +94,10 @@ impl GameReporterQueue {
 
         match res {
             Ok(value) if value == "true" => {
-                tracing::info!(target: Log::GameReporter, "Successfully executed abandonment request")
+                tracing::info!(target: Log::Slippi, "Successfully executed abandonment request")
             },
-            Ok(value) => tracing::error!(target: Log::GameReporter, ?value, "Error executing abandonment request",),
-            Err(error) => tracing::error!(target: Log::GameReporter, ?error, "Error executing abandonment request"),
+            Ok(value) => tracing::error!(target: Log::Slippi, ?value, "Error executing abandonment request",),
+            Err(error) => tracing::error!(target: Log::Slippi, ?error, "Error executing abandonment request"),
         }
     }
 }
@@ -116,7 +116,7 @@ pub(crate) fn run_completion(http_client: ureq::Agent, receiver: Receiver<Comple
             },
 
             Ok(CompletionEvent::Shutdown) => {
-                tracing::info!(target: Log::GameReporter, "Completion thread winding down");
+                tracing::info!(target: Log::Slippi, "Completion thread winding down");
                 break;
             },
 
@@ -125,7 +125,7 @@ pub(crate) fn run_completion(http_client: ureq::Agent, receiver: Receiver<Comple
             // for the hell of it in case anyone's tweaking the logic.
             Err(error) => {
                 tracing::error!(
-                    target: Log::GameReporter,
+                    target: Log::Slippi,
                     ?error,
                     "Failed to receive CompletionEvent, thread will exit"
                 );
@@ -160,10 +160,10 @@ pub fn report_completion(http_client: &ureq::Agent, uid: String, match_id: Strin
 
     match res {
         Ok(value) if value == "true" => {
-            tracing::info!(target: Log::GameReporter, "Successfully executed completion request")
+            tracing::info!(target: Log::Slippi, "Successfully executed completion request")
         },
-        Ok(value) => tracing::error!(target: Log::GameReporter, ?value, "Error executing completion request",),
-        Err(error) => tracing::error!(target: Log::GameReporter, ?error, "Error executing completion request"),
+        Ok(value) => tracing::error!(target: Log::Slippi, ?value, "Error executing completion request",),
+        Err(error) => tracing::error!(target: Log::Slippi, ?error, "Error executing completion request"),
     }
 }
 
@@ -177,7 +177,7 @@ pub(crate) fn run(reporter: GameReporterQueue, receiver: Receiver<ProcessingEven
             },
 
             Ok(ProcessingEvent::Shutdown) => {
-                tracing::info!(target: Log::GameReporter, "Processing thread winding down");
+                tracing::info!(target: Log::Slippi, "Processing thread winding down");
 
                 process_reports(&reporter, ProcessingEvent::Shutdown);
 
@@ -189,7 +189,7 @@ pub(crate) fn run(reporter: GameReporterQueue, receiver: Receiver<ProcessingEven
             // for the hell of it in case anyone's tweaking the logic.
             Err(error) => {
                 tracing::error!(
-                    target: Log::GameReporter,
+                    target: Log::Slippi,
                     ?error,
                     "Failed to receive ProcessingEvent, thread will exit"
                 );
@@ -203,12 +203,12 @@ pub(crate) fn run(reporter: GameReporterQueue, receiver: Receiver<ProcessingEven
 /// Process jobs from the queue.
 fn process_reports(queue: &GameReporterQueue, event: ProcessingEvent) {
     let Ok(iso_hash) = queue.iso_hash.lock() else {
-        tracing::warn!(target: Log::GameReporter, "No ISO_HASH available");
+        tracing::warn!(target: Log::Slippi, "No ISO_HASH available");
         return;
     };
 
     let Ok(mut report_queue) = queue.inner.lock() else {
-        tracing::warn!(target: Log::GameReporter, "Reporter Queue is dead");
+        tracing::warn!(target: Log::Slippi, "Reporter Queue is dead");
         return;
     };
 
@@ -224,7 +224,7 @@ fn process_reports(queue: &GameReporterQueue, event: ProcessingEvent) {
                 // to the replay uploader.
                 let report = report_queue.pop_front();
 
-                tracing::info!(target: Log::GameReporter, "Successfully sent report, popping from queue");
+                tracing::info!(target: Log::Slippi, "Successfully sent report, popping from queue");
 
                 if let (Some(report), Some(upload_url)) = (report, upload_url) {
                     try_upload_replay_data(report.replay_data, upload_url, &queue.http_client);
@@ -235,14 +235,14 @@ fn process_reports(queue: &GameReporterQueue, event: ProcessingEvent) {
 
             Err(error) => {
                 tracing::error!(
-                    target: Log::GameReporter,
+                    target: Log::Slippi,
                     error = ?error.kind,
                     backoff = ?error.sleep_ms,
                     "Failed to send report"
                 );
 
                 if error.is_last_attempt {
-                    tracing::error!(target: Log::GameReporter, "Hit max retry limit, dropping report");
+                    tracing::error!(target: Log::Slippi, "Hit max retry limit, dropping report");
                     let report = report_queue.pop_front(); // Remove the report so it no longer gets processed
 
                     // Tell player their report failed to send
@@ -427,7 +427,7 @@ fn try_upload_replay_data(data: Vec<u8>, upload_url: String, http_client: &ureq:
         Ok(size) => size,
 
         Err(error) => {
-            tracing::error!(target: Log::GameReporter, ?error, "Failed to compress replay");
+            tracing::error!(target: Log::Slippi, ?error, "Failed to compress replay");
             return;
         },
     };
@@ -442,6 +442,6 @@ fn try_upload_replay_data(data: Vec<u8>, upload_url: String, http_client: &ureq:
         .send_bytes(&gzipped_data);
 
     if let Err(error) = response {
-        tracing::error!(target: Log::GameReporter, ?error, "Failed to upload replay data",);
+        tracing::error!(target: Log::Slippi, ?error, "Failed to upload replay data",);
     }
 }

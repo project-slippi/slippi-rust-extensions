@@ -62,7 +62,11 @@ pub extern "C" fn slprs_exi_device_create(config: SlippiRustEXIConfig) -> usize 
 
     let exi_device_instance_ptr = Box::into_raw(exi_device) as usize;
 
-    tracing::warn!(target: Log::EXI, ptr = exi_device_instance_ptr, "Creating Device");
+    tracing::warn!(
+        target: Log::Slippi,
+        ptr = exi_device_instance_ptr,
+        "Initialized Rust EXI Device"
+    );
 
     exi_device_instance_ptr
 }
@@ -71,7 +75,11 @@ pub extern "C" fn slprs_exi_device_create(config: SlippiRustEXIConfig) -> usize 
 /// can safely shut down and clean up.
 #[no_mangle]
 pub extern "C" fn slprs_exi_device_destroy(exi_device_instance_ptr: usize) {
-    tracing::warn!(target: Log::EXI, ptr = exi_device_instance_ptr, "Destroying Device");
+    tracing::warn!(
+        target: Log::Slippi,
+        ptr = exi_device_instance_ptr,
+        "Destroying Rust EXI Device"
+    );
 
     // Coerce the instance from the pointer. This is theoretically safe since we control
     // the C++ side and can guarantee that the `exi_device_instance_ptr` is only owned

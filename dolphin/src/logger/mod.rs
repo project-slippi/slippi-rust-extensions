@@ -44,13 +44,10 @@ pub mod Log {
     /// Used for dumping logs from dependencies that we may need to inspect.
     /// This may also get logs that are not properly tagged! If that happens, you need
     /// to fix your logging calls. :)
-    pub const DEPENDENCIES: &'static str = "SLIPPI_RUST_DEPENDENCIES";
+    pub const Dependencies: &'static str = "SLIPPI_RUST_DEPENDENCIES";
 
     /// The default target for EXI tracing.
-    pub const EXI: &'static str = "SLIPPI_RUST_EXI";
-
-    /// Logs for `SlippiGameReporter`.
-    pub const GameReporter: &'static str = "SLIPPI_RUST_GAME_REPORTER";
+    pub const Slippi: &'static str = "SLIPPI_RUST_ONLINE";
 
     /// Can be used to segment Jukebox logs.
     pub const Jukebox: &'static str = "SLIPPI_RUST_JUKEBOX";
