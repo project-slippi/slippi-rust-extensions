@@ -39,7 +39,7 @@ impl SlippiEXIDevice {
     ///
     /// At the moment you should never need to call this yourself.
     pub fn new(config: Config) -> Self {
-        tracing::info!(target: Log::Slippi, "Starting SlippiEXIDevice");
+        tracing::info!(target: Log::SlippiOnline, "Starting SlippiEXIDevice");
 
         // We set `max_idle_connections` to `5` to mimic how CURL was configured in
         // the old C++ logic. This gets cloned and passed down into modules so that
@@ -85,7 +85,7 @@ impl SlippiEXIDevice {
         }
 
         if self.jukebox.is_some() {
-            tracing::warn!(target: Log::Slippi, "Jukebox is already active");
+            tracing::warn!(target: Log::SlippiOnline, "Jukebox is already active");
             return;
         }
 
@@ -104,7 +104,7 @@ impl SlippiEXIDevice {
                 },
 
                 Err(e) => tracing::error!(
-                    target: Log::Slippi,
+                    target: Log::SlippiOnline,
                     error = ?e,
                     "Failed to start Jukebox"
                 ),

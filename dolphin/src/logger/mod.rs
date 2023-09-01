@@ -46,8 +46,10 @@ pub mod Log {
     /// to fix your logging calls. :)
     pub const Dependencies: &'static str = "SLIPPI_RUST_DEPENDENCIES";
 
-    /// The default target for EXI tracing.
-    pub const Slippi: &'static str = "SLIPPI_RUST_ONLINE";
+    /// The general log that most core Slippi Rust tracing calls should target.
+    ///
+    /// Some things may need other logs (e.g, the Jukebox due to audio logs).
+    pub const SlippiOnline: &'static str = "SLIPPI_RUST_ONLINE";
 
     /// Can be used to segment Jukebox logs.
     pub const Jukebox: &'static str = "SLIPPI_RUST_JUKEBOX";

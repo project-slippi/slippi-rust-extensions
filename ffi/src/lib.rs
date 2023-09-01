@@ -93,7 +93,7 @@ pub(crate) fn c_str_to_string(string: *const c_char, fn_label: &str, err_label: 
 
         Err(e) => {
             tracing::error!(
-                target: Log::Slippi,
+                target: Log::SlippiOnline,
                 error = ?e,
                 "[{}] Failed to bridge {}, will panic",
                 fn_label,

@@ -134,7 +134,7 @@ impl GameReporter {
 
         if let Err(e) = self.queue_thread_notifier.send(ProcessingEvent::ReportAvailable) {
             tracing::error!(
-                target: Log::Slippi,
+                target: Log::SlippiOnline,
                 error = ?e,
                 "Unable to dispatch ReportAvailable notification"
             );
@@ -161,7 +161,7 @@ impl GameReporter {
 
         if let Err(e) = self.completion_thread_notifier.send(event) {
             tracing::error!(
-                target: Log::Slippi,
+                target: Log::SlippiOnline,
                 error = ?e,
                 "Unable to dispatch match completion notification"
             );
@@ -186,7 +186,7 @@ impl Drop for GameReporter {
         if let Some(queue_thread) = self.queue_thread.take() {
             if let Err(e) = self.queue_thread_notifier.send(ProcessingEvent::Shutdown) {
                 tracing::error!(
-                    target: Log::Slippi,
+                    target: Log::SlippiOnline,
                     error = ?e,
                     "Failed to send shutdown notification to queue processing thread, may hang"
                 );
@@ -194,7 +194,7 @@ impl Drop for GameReporter {
 
             if let Err(e) = queue_thread.join() {
                 tracing::error!(
-                    target: Log::Slippi,
+                    target: Log::SlippiOnline,
                     error = ?e,
                     "Queue thread failure"
                 );
@@ -204,7 +204,7 @@ impl Drop for GameReporter {
         if let Some(completion_thread) = self.completion_thread.take() {
             if let Err(e) = self.completion_thread_notifier.send(CompletionEvent::Shutdown) {
                 tracing::error!(
-                    target: Log::Slippi,
+                    target: Log::SlippiOnline,
                     error = ?e,
                     "Failed to send shutdown notification to completion processing thread, may hang"
                 );
@@ -212,7 +212,7 @@ impl Drop for GameReporter {
 
             if let Err(e) = completion_thread.join() {
                 tracing::error!(
-                    target: Log::Slippi,
+                    target: Log::SlippiOnline,
                     error = ?e,
                     "Completion thread failure"
                 );
@@ -222,7 +222,7 @@ impl Drop for GameReporter {
         if let Some(iso_md5_hasher_thread) = self.iso_md5_hasher_thread.take() {
             if let Err(e) = iso_md5_hasher_thread.join() {
                 tracing::error!(
-                    target: Log::Slippi,
+                    target: Log::SlippiOnline,
                     error = ?e,
                     "ISO MD5 hasher thread failure"
                 );

@@ -63,7 +63,7 @@ pub extern "C" fn slprs_exi_device_create(config: SlippiRustEXIConfig) -> usize 
     let exi_device_instance_ptr = Box::into_raw(exi_device) as usize;
 
     tracing::warn!(
-        target: Log::Slippi,
+        target: Log::SlippiOnline,
         ptr = exi_device_instance_ptr,
         "Initialized Rust EXI Device"
     );
@@ -76,7 +76,7 @@ pub extern "C" fn slprs_exi_device_create(config: SlippiRustEXIConfig) -> usize 
 #[no_mangle]
 pub extern "C" fn slprs_exi_device_destroy(exi_device_instance_ptr: usize) {
     tracing::warn!(
-        target: Log::Slippi,
+        target: Log::SlippiOnline,
         ptr = exi_device_instance_ptr,
         "Destroying Rust EXI Device"
     );
