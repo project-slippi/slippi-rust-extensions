@@ -1,23 +1,24 @@
 [package]
-name = "slippi-exi-device"
-description = "Implements a shadow EXI device."
-version = "0.1.0"
+name = "slippi-user"
+description = "Data models and helpers for user authentication status."
 authors = [
     "Slippi Team",
     "Ryan McGrath <ryan@rymc.io>"
 ]
+version = "0.1.0"
 edition = "2021"
 publish = false
 
 [features]
-default = []
+default = ["ishiiruka"]
 ishiiruka = []
 mainline = []
+playback = []
 
 [dependencies]
 dolphin-integrations = { path = "../dolphin" }
-slippi-game-reporter = { path = "../game-reporter" }
-slippi-jukebox = { path = "../jukebox" }
-slippi-user = { path = "../user" }
+open = "5"
+serde = { workspace = true }
+serde_json = { workspace = true }
 tracing = { workspace = true }
 ureq = { workspace = true }

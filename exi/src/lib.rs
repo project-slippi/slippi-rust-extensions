@@ -5,15 +5,24 @@
 //! `SlippiEXIDevice` and forwards calls over the C FFI. This has a fairly clean mapping to "when
 //! Slippi stuff is happening" and enables us to let the Rust side live in its own world.
 
+use std::time::Duration;
+
+use ureq::AgentBuilder;
+
 use dolphin_integrations::Log;
-use slippi_game_reporter::SlippiGameReporter;
+use slippi_game_reporter::GameReporter;
 use slippi_jukebox::Jukebox;
+use slippi_user::UserManager;
+
+mod config;
+pub use config::{Config, FilePathsConfig, SCMConfig};
 
 /// An EXI Device subclass specific to managing and interacting with the game itself.
 #[derive(Debug)]
 pub struct SlippiEXIDevice {
-    iso_path: String,
-    pub game_reporter: SlippiGameReporter,
+    config: Config,
+    pub game_reporter: GameReporter,
+    pub user_manager: UserManager,
     pub jukebox: Option<Jukebox>,
 }
 
@@ -29,14 +38,35 @@ impl SlippiEXIDevice {
     /// Creates and returns a new `SlippiEXIDevice` with default values.
     ///
     /// At the moment you should never need to call this yourself.
-    pub fn new(iso_path: String) -> Self {
-        tracing::info!(target: Log::EXI, "Starting SlippiEXIDevice");
+    pub fn new(config: Config) -> Self {
+        tracing::info!(target: Log::SlippiOnline, "Starting SlippiEXIDevice");
 
-        let game_reporter = SlippiGameReporter::new(iso_path.clone());
+        // We set `max_idle_connections` to `5` to mimic how CURL was configured in
+        // the old C++ logic. This gets cloned and passed down into modules so that
+        // the underlying connection pool is shared.
+        let http_client = AgentBuilder::new()
+            .max_idle_connections(5)
+            .timeout(Duration::from_millis(5000))
+            .user_agent(&format!("SlippiDolphin/{} (Rust)", config.scm.slippi_semver))
+            .build();
+
+        let user_manager = UserManager::new(
+            http_client.clone(),
+            config.paths.user_json.clone().into(),
+            config.scm.slippi_semver.clone(),
+        );
+
+        let game_reporter = GameReporter::new(http_client.clone(), user_manager.clone(), config.paths.iso.clone());
+
+        // Playback has no need to deal with this.
+        // (We could maybe silo more?)
+        #[cfg(not(feature = "playback"))]
+        user_manager.watch_for_login();
 
         Self {
-            iso_path,
+            config,
             game_reporter,
+            user_manager,
             jukebox: None,
         }
     }
@@ -55,7 +85,7 @@ impl SlippiEXIDevice {
         }
 
         if self.jukebox.is_some() {
-            tracing::warn!(target: Log::EXI, "Jukebox is already active");
+            tracing::warn!(target: Log::SlippiOnline, "Jukebox is already active");
             return;
         }
 
@@ -65,7 +95,7 @@ impl SlippiEXIDevice {
         } = config
         {
             match Jukebox::new(
-                self.iso_path.clone(),
+                self.config.paths.iso.clone(),
                 initial_dolphin_system_volume,
                 initial_dolphin_music_volume,
             ) {
@@ -74,7 +104,7 @@ impl SlippiEXIDevice {
                 },
 
                 Err(e) => tracing::error!(
-                    target: Log::EXI,
+                    target: Log::SlippiOnline,
                     error = ?e,
                     "Failed to start Jukebox"
                 ),

@@ -17,18 +17,50 @@ enum SlippiMatchmakingOnlinePlayMode {
   Teams = 3,
 };
 
+/// A configuration struct for passing over certain argument types from the C/C++ side.
+///
+/// The number of arguments necessary to shuttle across the FFI boundary when starting the
+/// EXI device is higher than ideal at the moment, though it should lessen with time. For now,
+/// this struct exists to act as a slightly more sane approach to readability of the args
+/// structure.
+struct SlippiRustEXIConfig {
+  const char *iso_path;
+  const char *user_json_path;
+  const char *scm_slippi_semver_str;
+  void (*osd_add_msg_fn)(const char*, uint32_t, uint32_t);
+};
+
+/// An intermediary type for moving `UserInfo` across the FFI boundary.
+///
+/// This type is C compatible, and we coerce Rust types into C types for this struct to
+/// ease passing things over. This must be free'd on the Rust side via `slprs_user_free_info`.
+struct RustUserInfo {
+  const char *uid;
+  const char *play_key;
+  const char *display_name;
+  const char *connect_code;
+  const char *latest_version;
+};
+
+/// An intermediary type for moving chat messages across the FFI boundary.
+///
+/// This type is C compatible, and we coerce Rust types into C types for this struct to
+/// ease passing things over. This must be free'd on the Rust side via `slprs_user_free_messages`.
+struct RustChatMessages {
+  char **data;
+  int len;
+};
+
 extern "C" {
 
-/// Creates and leaks a shadow EXI device.
+/// Creates and leaks a shadow EXI device with the provided configuration.
 ///
 /// The C++ (Dolphin) side of things should call this and pass the appropriate arguments. At
 /// that point, everything on the Rust side is its own universe, and should be told to shut
 /// down (at whatever point) via the corresponding `slprs_exi_device_destroy` function.
 ///
 /// The returned pointer from this should *not* be used after calling `slprs_exi_device_destroy`.
-uintptr_t slprs_exi_device_create(const char *iso_path, void (*osd_add_msg_fn)(const char*,
-                                                                               uint32_t,
-                                                                               uint32_t));
+uintptr_t slprs_exi_device_create(SlippiRustEXIConfig config);
 
 /// The C++ (Dolphin) side of things should call this to notify the Rust side that it
 /// can safely shut down and clean up.
@@ -63,17 +95,12 @@ void slprs_exi_device_start_new_reporter_session(uintptr_t instance_ptr);
 /// Calls through to the `SlippiGameReporter` on the EXI device to report a
 /// match completion event.
 void slprs_exi_device_report_match_completion(uintptr_t instance_ptr,
-                                              const char *uid,
-                                              const char *play_key,
                                               const char *match_id,
                                               uint8_t end_mode);
 
 /// Calls through to the `SlippiGameReporter` on the EXI device to report a
 /// match abandon event.
-void slprs_exi_device_report_match_abandonment(uintptr_t instance_ptr,
-                                               const char *uid,
-                                               const char *play_key,
-                                               const char *match_id);
+void slprs_exi_device_report_match_abandonment(uintptr_t instance_ptr, const char *match_id);
 
 /// Calls through to `SlippiGameReporter::push_replay_data`.
 void slprs_exi_device_reporter_push_replay_data(uintptr_t instance_ptr,
@@ -169,5 +196,64 @@ void slprs_logging_update_container(const char *kind, bool enabled, int level);
 ///
 /// For more information, see `dolphin_logger::update_container`.
 void slprs_mainline_logging_update_log_level(int level);
+
+/// Instructs the `UserManager` on the EXI Device at the provided pointer to attempt
+/// authentication. This runs synchronously on whatever thread it's called on.
+bool slprs_user_attempt_login(uintptr_t exi_device_instance_ptr);
+
+/// Instructs the `UserManager` on the EXI Device at the provided pointer to try to
+/// open the login page in a system-provided browser view.
+void slprs_user_open_login_page(uintptr_t exi_device_instance_ptr);
+
+/// Instructs the `UserManager` on the EXI Device at the provided pointer to attempt
+/// to initiate the older update flow.
+bool slprs_user_update_app(uintptr_t exi_device_instance_ptr);
+
+/// Instructs the `UserManager` on the EXI Device at the provided pointer to start watching
+/// for the presence of a `user.json` file. The `UserManager` should have the requisite path
+/// already from EXI device instantiation.
+void slprs_user_listen_for_login(uintptr_t exi_device_instance_ptr);
+
+/// Instructs the `UserManager` on the EXI Device at the provided pointer to sign the user out.
+/// This will delete the `user.json` file from the underlying filesystem.
+void slprs_user_logout(uintptr_t exi_device_instance_ptr);
+
+/// Hooks through the `UserManager` on the EXI Device at the provided pointer to overwrite the
+/// latest version field on the current user.
+void slprs_user_overwrite_latest_version(uintptr_t exi_device_instance_ptr, const char *version);
+
+/// Hooks through the `UserManager` on the EXI Device at the provided pointer to determine
+/// authentication status.
+bool slprs_user_get_is_logged_in(uintptr_t exi_device_instance_ptr);
+
+/// Hooks through the `UserManager` on the EXI Device at the provided pointer to get information
+/// for the current user. This then wraps it in a C struct to pass back so that ownership is safely
+/// moved.
+///
+/// This involves slightly more allocations than ideal, so this shouldn't be called in a hot path.
+/// Over time this issue will not matter as once Matchmaking is moved to Rust we can share things
+/// quite easily.
+RustUserInfo *slprs_user_get_info(uintptr_t exi_device_instance_ptr);
+
+/// Takes ownership back of a `UserInfo` struct and drops it.
+///
+/// When the C/C++ side grabs `UserInfo`, it needs to ensure that it's passed back to Rust
+/// to ensure that the memory layout matches - do _not_ call `free` on `UserInfo`, pass it here
+/// instead.
+void slprs_user_free_info(RustUserInfo *ptr);
+
+/// Returns a C-compatible struct containing the chat message options for the current user.
+///
+/// The return value of this _must_ be passed back to `slprs_user_free_messages` to free memory.
+RustChatMessages *slprs_user_get_messages(uintptr_t exi_device_instance_ptr);
+
+/// Returns a C-compatible struct containing the default chat message options.
+///
+/// The return value of this _must_ be passed back to `slprs_user_free_messages` to free memory.
+RustChatMessages *slprs_user_get_default_messages(uintptr_t exi_device_instance_ptr);
+
+/// Takes back ownership of a `RustChatMessages` instance and frees the underlying data
+/// by converting it into the proper Rust types.
+void slprs_user_free_messages(RustChatMessages *ptr);
 
 } // extern "C"

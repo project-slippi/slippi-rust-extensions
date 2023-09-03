@@ -1,5 +1,5 @@
 [package]
-name = "slippi_rust_extensions"
+name = "slippi-rust-extensions"
 description = "An internal library that exposes entry points via the C FFI."
 version = "0.1.0"
 authors = [
@@ -21,7 +21,8 @@ default = ["ishiiruka"]
 ishiiruka = [
     "dolphin-integrations/ishiiruka",
     "slippi-game-reporter/ishiiruka",
-    "slippi-exi-device/ishiiruka"
+    "slippi-exi-device/ishiiruka",
+    "slippi-user/ishiiruka"
 ]
 mainline = []
 playback = []
@@ -31,4 +32,5 @@ dolphin-integrations = { path = "../dolphin" }
 slippi-game-reporter = { path = "../game-reporter" }
 slippi-exi-device = { path = "../exi" }
 slippi-jukebox = { path = "../jukebox" }
+slippi-user = { path = "../user" }
 tracing = { workspace = true }

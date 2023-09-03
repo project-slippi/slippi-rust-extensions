@@ -18,5 +18,6 @@ flate2 = "1.0"
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_repr = { workspace = true }
+slippi-user = { path = "../user" }
 tracing = { workspace = true }
 ureq = { workspace = true }

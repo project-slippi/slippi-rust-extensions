@@ -2,7 +2,7 @@ use std::ffi::c_char;
 
 use slippi_game_reporter::{GameReport, OnlinePlayMode as ReporterOnlinePlayMode, PlayerReport};
 
-use crate::{c_str_to_string, set};
+use crate::{c_str_to_string, with};
 
 /// This enum is duplicated from `slippi_game_reporter::OnlinePlayMode` in order
 /// to appease cbindgen, which cannot see the type from the other module for
@@ -113,7 +113,7 @@ pub extern "C" fn slprs_game_report_add_player_report(instance_ptr: usize, playe
     // by us, and is created/destroyed with the corresponding lifetimes.
     let player_report = unsafe { Box::from_raw(player_report_instance_ptr as *mut PlayerReport) };
 
-    set::<GameReport, _>(instance_ptr, move |report| {
+    with::<GameReport, _>(instance_ptr, move |report| {
         report.players.push(*player_report);
     });
 }

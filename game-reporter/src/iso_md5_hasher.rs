@@ -31,14 +31,14 @@ pub fn run(iso_hash: Arc<Mutex<String>>, iso_path: String) {
             Ok(digest) => digest,
 
             Err(error) => {
-                tracing::error!(target: Log::GameReporter, ?error, "Unable to produce ISO MD5 Hash");
+                tracing::error!(target: Log::SlippiOnline, ?error, "Unable to produce ISO MD5 Hash");
 
                 return;
             },
         },
 
         Err(error) => {
-            tracing::error!(target: Log::GameReporter, ?error, "Unable to open ISO for MD5 hashing");
+            tracing::error!(target: Log::SlippiOnline, ?error, "Unable to open ISO for MD5 hashing");
 
             return;
         },
@@ -47,12 +47,12 @@ pub fn run(iso_hash: Arc<Mutex<String>>, iso_path: String) {
     let hash = format!("{:x}", digest);
 
     if !KNOWN_DESYNC_ISOS.contains(&hash.as_str()) {
-        tracing::info!(target: Log::GameReporter, iso_md5_hash = ?hash);
+        tracing::info!(target: Log::SlippiOnline, iso_md5_hash = ?hash);
     } else {
         // Dump it into the logs as well in case we're ever looking at a user's
         // logs - may end up being faster than trying to debug with them.
         tracing::warn!(
-            target: Log::GameReporter,
+            target: Log::SlippiOnline,
             iso_md5_hash = ?hash,
             "Potential desync ISO detected"
         );
@@ -74,7 +74,7 @@ pub fn run(iso_hash: Arc<Mutex<String>>, iso_path: String) {
         },
 
         Err(error) => {
-            tracing::error!(target: Log::GameReporter, ?error, "Unable to lock iso_hash");
+            tracing::error!(target: Log::SlippiOnline, ?error, "Unable to lock iso_hash");
         },
     };
 }
