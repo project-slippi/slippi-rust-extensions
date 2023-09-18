@@ -74,6 +74,7 @@ impl UserInfoWatcher {
 
     /// Standard logic for popping the thread handle and joining it, logging on failure.
     fn release_thread(&mut self) {
+        self.should_watch.store(false, Ordering::Relaxed);
         if let Some(watcher_thread) = self.watcher_thread.take() {
             if let Err(error) = watcher_thread.join() {
                 tracing::error!(?error, "user.json background thread join failure");
