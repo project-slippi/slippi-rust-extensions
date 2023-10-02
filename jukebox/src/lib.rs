@@ -134,6 +134,11 @@ impl Jukebox {
                         Ok(audio) => audio,
                         Err(e) => {
                             tracing::error!(target: Log::Jukebox, error = ?e, "Failed to decode hps into audio. Cannot play song.");
+                            Dolphin::add_osd_message(
+                                Color::Red,
+                                OSDDuration::Normal,
+                                "Your ISO contains corrupt music data. This song will not be played.",
+                            );
                             continue;
                         },
                     };
