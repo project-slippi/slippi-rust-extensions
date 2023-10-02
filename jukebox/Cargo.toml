@@ -17,7 +17,7 @@ mainline = []
 
 [dependencies]
 dolphin-integrations = { path = "../dolphin" }
-hps_decode = "0.1.1"
+hps_decode = { version = "0.2.0", features=["rodio-source"] }
 rodio = { version = "0.17.1", default-features = false }
 thiserror = "1.0.44"
 tracing = { workspace = true }

@@ -457,11 +457,13 @@ checksum = "443144c8cdadd93ebf52ddb4056d257f5b52c04d3c804e657d19eb73fc33668b"
 
 [[package]]
 name = "hps_decode"
-version = "0.1.1"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a265f4bd80aa3aee69875279ebd2e1ab3dd976fae2ead395b22c7ae8e5c7247"
+checksum = "64050dca979f31ac51290cd4d0f3a44d46edfb8ea863588f13a2d193fcd626ec"
 dependencies = [
+ "nom",
  "rayon",
+ "rodio",
  "thiserror",
 ]
 
