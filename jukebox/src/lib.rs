@@ -137,7 +137,7 @@ impl Jukebox {
                             Dolphin::add_osd_message(
                                 Color::Red,
                                 OSDDuration::Normal,
-                                "Your ISO contains corrupt music data. This song will not be played.",
+                                "Invalid music data found in ISO. This music will not play.",
                             );
                             continue;
                         },
