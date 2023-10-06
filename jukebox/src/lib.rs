@@ -4,7 +4,7 @@ use std::fs::File;
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use dolphin_integrations::{Color, Dolphin, Duration as OSDDuration, Log};
-use hps_decode::{Hps, PcmIterator};
+use hps_decode::Hps;
 use rodio::{OutputStream, Sink};
 
 use crate::Message::*;
@@ -32,6 +32,13 @@ pub enum Message {
     StopMusic,
     SetVolume(VolumeControl, u8),
     JukeboxDropped,
+}
+
+#[derive(Debug)]
+pub enum VolumeControl {
+    Melee,
+    DolphinSystem,
+    DolphinMusic,
 }
 
 #[derive(Debug)]
@@ -123,10 +130,21 @@ impl Jukebox {
                     };
 
                     // Decode the Hps into audio
-                    let audio_source = HpsAudioSource(hps.into());
+                    let audio = match hps.decode() {
+                        Ok(audio) => audio,
+                        Err(e) => {
+                            tracing::error!(target: Log::Jukebox, error = ?e, "Failed to decode hps into audio. Cannot play song.");
+                            Dolphin::add_osd_message(
+                                Color::Red,
+                                OSDDuration::Normal,
+                                "Invalid music data found in ISO. This music will not play.",
+                            );
+                            continue;
+                        },
+                    };
 
                     // Play the song
-                    sink.append(audio_source);
+                    sink.append(audio);
                     sink.play();
                 },
                 SetVolume(control, volume) => {
@@ -181,38 +199,5 @@ impl Drop for Jukebox {
                 "Failed to notify child thread that Jukebox is dropping: {e}"
             );
         }
-    }
-}
-
-#[derive(Debug)]
-pub enum VolumeControl {
-    Melee,
-    DolphinSystem,
-    DolphinMusic,
-}
-
-// This wrapper allows us to implement `rodio::Source`
-struct HpsAudioSource(PcmIterator);
-
-impl Iterator for HpsAudioSource {
-    type Item = i16;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.next()
-    }
-}
-
-impl rodio::Source for HpsAudioSource {
-    fn current_frame_len(&self) -> Option<usize> {
-        None
-    }
-    fn channels(&self) -> u16 {
-        self.0.channel_count as u16
-    }
-    fn sample_rate(&self) -> u32 {
-        self.0.sample_rate
-    }
-    fn total_duration(&self) -> Option<std::time::Duration> {
-        None
     }
 }
