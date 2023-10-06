@@ -44,4 +44,6 @@ ureq = { version = "2.7.1", features = ["json"] }
 #   - https://github.com/RustAudio/cpal/issues/796
 #   - https://github.com/project-slippi/cpal/commit/b0058fc99e324e919cba099077f43db90ddada94
 # 
-cpal = { git = "https://github.com/project-slippi/cpal.git" }
+# We have also added some extra logging ourselves to try to track down the source of the issue.
+#
+cpal = { git = "https://github.com/project-slippi/cpal.git", ref="1ec6b46495d702b067e5574cbda0cae2fc9dbae3" }
