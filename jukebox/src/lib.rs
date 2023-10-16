@@ -102,6 +102,8 @@ impl Jukebox {
         let mut dolphin_system_volume = (initial_dolphin_system_volume as f32 / 100.0).clamp(0.0, 1.0);
         let mut dolphin_music_volume = (initial_dolphin_music_volume as f32 / 100.0).clamp(0.0, 1.0);
 
+        sink.set_volume(melee_music_volume * dolphin_system_volume * dolphin_music_volume * VOLUME_REDUCTION_MULTIPLIER);
+
         loop {
             match rx.recv()? {
                 StartSong(hps_offset, hps_length) => {
