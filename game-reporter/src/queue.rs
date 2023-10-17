@@ -18,7 +18,7 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use std::io::Write;
 
-const GRAPHQL_URL: &str = "https://gql-gateway-dev-dot-slippi.uc.r.appspot.com/graphql";
+const GRAPHQL_URL: &str = "https://gql-gateway-dot-slippi.uc.r.appspot.com/graphql";
 
 /// How many times a report should attempt to send.
 const MAX_REPORT_ATTEMPTS: i32 = 5;
