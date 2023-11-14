@@ -408,8 +408,7 @@ fn compress_to_gzip(input: &[u8], output: &mut [u8]) -> Result<usize, std::io::E
     Ok(res.len())
 }
 
-/// Attempts to compress and upload replay data to the url at `upload_url`.
-fn try_upload_replay_data(data: Arc<Mutex<Vec<u8>>>, upload_url: String, http_client: &ureq::Agent) {
+fn add_slp_header_and_footer(data: Arc<Mutex<Vec<u8>>>) -> Vec<u8> {
     let guard = data.lock().unwrap();
     let raw_data_size = guard.len() as u32;
     let rdbs = raw_data_size.to_le_bytes();
@@ -421,6 +420,13 @@ fn try_upload_replay_data(data: Arc<Mutex<Vec<u8>>>, upload_url: String, http_cl
     contents.extend_from_slice(&guard);
     let mut footer = vec![b'U', 8, b'm', b'e', b't', b'a', b'd', b'a', b't', b'a', b'{', b'}', b'}'];
     contents.append(&mut footer);
+
+    return contents;
+}
+
+/// Attempts to compress and upload replay data to the url at `upload_url`.
+fn try_upload_replay_data(data: Arc<Mutex<Vec<u8>>>, upload_url: String, http_client: &ureq::Agent) {
+    let contents = add_slp_header_and_footer(data);
 
     let mut gzipped_data = vec![0u8; contents.len()]; // Resize to some initial size
 
@@ -434,10 +440,6 @@ fn try_upload_replay_data(data: Arc<Mutex<Vec<u8>>>, upload_url: String, http_cl
     };
 
     gzipped_data.resize(res_size, 0);
-
-    // Drop guard here before running a potentially lengthy network request. We don't want the main thread
-    // stalling while the network request is in flight.
-    drop(guard);
 
     let response = http_client
         .put(upload_url.as_str())
