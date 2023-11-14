@@ -1,5 +1,8 @@
 use std::ffi::c_char;
 
+use std::sync::Arc;
+use std::sync::Mutex;
+
 use slippi_game_reporter::{GameReport, OnlinePlayMode as ReporterOnlinePlayMode, PlayerReport};
 
 use crate::{c_str_to_string, with};
@@ -96,7 +99,7 @@ pub extern "C" fn slprs_game_report_create(
         lras_initiator,
         stage_id,
         players: Vec::new(),
-        replay_data: Vec::new(),
+        replay_data: Arc::new(Mutex::new(Vec::new())),
     });
 
     let report_instance_ptr = Box::into_raw(report) as usize;

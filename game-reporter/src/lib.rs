@@ -4,6 +4,7 @@
 use std::ops::Deref;
 use std::sync::mpsc::{self, Sender};
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::thread;
 
 use ureq::Agent;
@@ -55,7 +56,7 @@ pub struct GameReporter {
     completion_thread: Option<thread::JoinHandle<()>>,
     completion_thread_notifier: Sender<CompletionEvent>,
     queue: GameReporterQueue,
-    replay_data: Arc<Vec<u8>>,
+    replay_data: Arc<Mutex<Vec<u8>>>,
 }
 
 impl GameReporter {
@@ -103,7 +104,7 @@ impl GameReporter {
         Self {
             user_manager,
             queue,
-            replay_data: Arc::new(Vec::new()),
+            replay_data: Arc::new(Mutex::new(Vec::new())),
             queue_thread_notifier: queue_sender,
             queue_thread: Some(queue_thread),
             completion_thread_notifier: completion_sender,
@@ -121,10 +122,11 @@ impl GameReporter {
     /// Logs replay data that's passed to it.
     pub fn push_replay_data(&mut self, data: &[u8]) {
         if !data.is_empty() && data[0] == 0x35 {
-            self.replay_data = Arc::new(Vec::new());
+            self.replay_data = Arc::new(Mutex::new(Vec::new()));
         }
 
-        Arc::make_mut(&mut self.replay_data).extend_from_slice(data);
+        let mut guard = self.replay_data.lock().unwrap();
+        guard.extend_from_slice(data);
     }
 
     /// Adds a report for processing and signals to the processing thread that there's

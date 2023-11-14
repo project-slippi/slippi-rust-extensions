@@ -1,3 +1,6 @@
+use std::sync::Arc;
+use std::sync::Mutex;
+
 /// The different modes that a player could be in.
 ///
 /// Note that this type uses `serde_repr` to ensure we serialize the value (C-style)
@@ -30,7 +33,7 @@ pub struct GameReport {
 
     // This is set when we log the report. Anything before then
     // is a non-allocated `Vec<u8>` to just be a placeholder.
-    pub replay_data: std::sync::Arc<Vec<u8>>,
+    pub replay_data: Arc<Mutex<Vec<u8>>>,
 }
 
 /// Player metadata payload that's logged with game info.
