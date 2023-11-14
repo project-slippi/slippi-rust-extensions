@@ -30,7 +30,7 @@ pub struct GameReport {
 
     // This is set when we log the report. Anything before then
     // is a non-allocated `Vec<u8>` to just be a placeholder.
-    pub replay_data: Vec<u8>,
+    pub replay_data: std::sync::Arc<Vec<u8>>,
 }
 
 /// Player metadata payload that's logged with game info.

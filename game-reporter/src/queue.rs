@@ -409,7 +409,7 @@ fn compress_to_gzip(input: &[u8], output: &mut [u8]) -> Result<usize, std::io::E
 }
 
 /// Attempts to compress and upload replay data to the url at `upload_url`.
-fn try_upload_replay_data(data: Vec<u8>, upload_url: String, http_client: &ureq::Agent) {
+fn try_upload_replay_data(data: Arc<Vec<u8>>, upload_url: String, http_client: &ureq::Agent) {
     let raw_data_size = data.len() as u32;
     let rdbs = raw_data_size.to_le_bytes();
 
