@@ -422,7 +422,7 @@ fn try_upload_replay_data(data: Arc<Mutex<Vec<u8>>>, upload_url: String, http_cl
     let mut footer = vec![b'U', 8, b'm', b'e', b't', b'a', b'd', b'a', b't', b'a', b'{', b'}', b'}'];
     contents.append(&mut footer);
 
-    let mut gzipped_data = vec![0u8; guard.len()]; // Resize to some initial size
+    let mut gzipped_data = vec![0u8; contents.len()]; // Resize to some initial size
 
     let res_size = match compress_to_gzip(&contents, &mut gzipped_data) {
         Ok(size) => size,
@@ -435,7 +435,8 @@ fn try_upload_replay_data(data: Arc<Mutex<Vec<u8>>>, upload_url: String, http_cl
 
     gzipped_data.resize(res_size, 0);
 
-    // Drop guard here before running the upload, since we don't need it anymore.
+    // Drop guard here before running a potentially lengthy network request. We don't want the main thread
+    // stalling while the network request is in flight.
     drop(guard);
 
     let response = http_client
