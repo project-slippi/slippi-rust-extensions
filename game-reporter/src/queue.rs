@@ -408,20 +408,29 @@ fn compress_to_gzip(input: &[u8], output: &mut [u8]) -> Result<usize, std::io::E
     Ok(res.len())
 }
 
-/// Attempts to compress and upload replay data to the url at `upload_url`.
-fn try_upload_replay_data(data: Vec<u8>, upload_url: String, http_client: &ureq::Agent) {
-    let raw_data_size = data.len() as u32;
-    let rdbs = raw_data_size.to_le_bytes();
+fn add_slp_header_and_footer(data: Arc<Mutex<Vec<u8>>>) -> Vec<u8> {
+    let guard = data.lock().unwrap();
+    let raw_data_size = guard.len();
+    let data_size_bytes = (raw_data_size as u32).to_be_bytes();
+
+    let header = [b'{', b'U', 3, b'r', b'a', b'w', b'[', b'$', b'U', b'#', b'l'];
+    let footer = [b'U', 8, b'm', b'e', b't', b'a', b'd', b'a', b't', b'a', b'{', b'}', b'}'];
 
     // Add header and footer to replay file
-    let mut contents = vec![
-        b'{', b'U', 3, b'r', b'a', b'w', b'[', b'$', b'U', b'#', b'l', rdbs[3], rdbs[2], rdbs[1], rdbs[0],
-    ];
-    contents.extend_from_slice(&data);
-    let mut footer = vec![b'U', 8, b'm', b'e', b't', b'a', b'd', b'a', b't', b'a', b'{', b'}', b'}'];
-    contents.append(&mut footer);
+    header
+        .iter()
+        .chain(data_size_bytes.iter())
+        .chain(guard.iter())
+        .chain(footer.iter())
+        .cloned()
+        .collect()
+}
 
-    let mut gzipped_data = vec![0u8; data.len()]; // Resize to some initial size
+/// Attempts to compress and upload replay data to the url at `upload_url`.
+fn try_upload_replay_data(data: Arc<Mutex<Vec<u8>>>, upload_url: String, http_client: &ureq::Agent) {
+    let contents = add_slp_header_and_footer(data);
+
+    let mut gzipped_data = vec![0u8; contents.len()]; // Resize to some initial size
 
     let res_size = match compress_to_gzip(&contents, &mut gzipped_data) {
         Ok(size) => size,
