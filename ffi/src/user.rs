@@ -135,11 +135,11 @@ pub extern "C" fn slprs_user_free_info(ptr: *mut RustUserInfo) {
     unsafe {
         let user_info = Box::from_raw(ptr);
 
-        let _uid = CString::from_raw(user_info.uid as *mut i8);
-        let _play_key = CString::from_raw(user_info.play_key as *mut i8);
-        let _display_name = CString::from_raw(user_info.display_name as *mut i8);
-        let _connect_code = CString::from_raw(user_info.connect_code as *mut i8);
-        let _latest_version = CString::from_raw(user_info.latest_version as *mut i8);
+        let _uid = CString::from_raw(user_info.uid as *mut _);
+        let _play_key = CString::from_raw(user_info.play_key as *mut _);
+        let _display_name = CString::from_raw(user_info.display_name as *mut _);
+        let _connect_code = CString::from_raw(user_info.connect_code as *mut _);
+        let _latest_version = CString::from_raw(user_info.latest_version as *mut _);
     }
 }
 
@@ -166,7 +166,7 @@ impl RustChatMessages {
         // To move an array of C strings back, we'll create a Vec of CString pointers, shrink it,
         // and stash the len and pointer on the struct we're returning. The C++ side can unravel
         // as necessary, and the free method in this module should handle cleaning this up.
-        let mut chat_messages: Vec<*mut i8> = messages
+        let mut chat_messages: Vec<*mut _> = messages
             .iter()
             .map(|message| {
                 CString::new(message.as_ref())
