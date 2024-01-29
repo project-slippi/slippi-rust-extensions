@@ -1,7 +1,7 @@
 use std::io;
 use std::net::{SocketAddr, ToSocketAddrs};
-use std::time::Duration;
 use std::ops::{Deref, DerefMut};
+use std::time::Duration;
 
 use ureq::{Agent, AgentBuilder, Resolver};
 
@@ -15,9 +15,7 @@ impl Resolver for Ipv4Resolver {
     /// Forces IPV4 addresses only.
     fn resolve(&self, netloc: &str) -> io::Result<Vec<SocketAddr>> {
         ToSocketAddrs::to_socket_addrs(netloc).map(|iter| {
-            let vec = iter
-                .filter(|s| s.is_ipv4())
-                .collect::<Vec<SocketAddr>>();
+            let vec = iter.filter(|s| s.is_ipv4()).collect::<Vec<SocketAddr>>();
 
             if vec.is_empty() {
                 tracing::warn!("Failed to get any IPV4 addresses. Does the DNS server support it?");
