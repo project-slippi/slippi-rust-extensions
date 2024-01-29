@@ -13,6 +13,9 @@ use dolphin_integrations::Log;
 use slippi_game_reporter::GameReporter;
 use slippi_jukebox::Jukebox;
 use slippi_user::UserManager;
+// Addition to existing imports
+use slippi_discord_rpc::DiscordClientRequest; // This assumes slippi-discord-rpc has this type or function.
+use slippi_discord_rpc::DiscordClientRequestType; // Adjust this as necessary based on actual module contents.
 
 mod config;
 pub use config::{Config, FilePathsConfig, SCMConfig};
@@ -24,6 +27,7 @@ pub struct SlippiEXIDevice {
     pub game_reporter: GameReporter,
     pub user_manager: UserManager,
     pub jukebox: Option<Jukebox>,
+    discord_client: Option<DiscordClient>,
 }
 
 pub enum JukeboxConfiguration {
@@ -70,7 +74,28 @@ impl SlippiEXIDevice {
             jukebox: None,
         }
     }
+    pub fn start_discord_client(&mut self) {
+        if self.discord_client.is_some() {
+            tracing::info!(target: Log::SlippiOnline, "Discord client is already running.");
+            return;
+        }
 
+        match DiscordClient::new() { // Replace with the actual API call to create a new Discord client instance.
+            Ok(client) => {
+                self.discord_client = Some(client);
+                tracing::info!(target: Log::SlippiOnline, "Discord client started successfully.");
+
+                // If needed, run the Discord client in the background, for example with a Tokio task.
+                // This will require the Discord client to be 'Send' if it is moved to an async block.
+                tokio::spawn(async move {
+                    self.discord_client.as_mut().unwrap().run().await;
+                });
+            }
+            Err(e) => {
+                tracing::error!(target: Log::SlippiOnline, "Failed to start Discord client due to {:?}", e);
+            }
+        }
+    }
     /// Stubbed for now, but this would get called by the C++ EXI device on DMAWrite.
     pub fn dma_write(&mut self, _address: usize, _size: usize) {}
 
