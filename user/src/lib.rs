@@ -4,9 +4,8 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use ureq::Agent;
-
 // use dolphin_integrations::Log;
+use slippi_gg_api::APIClient;
 
 mod chat;
 pub use chat::DEFAULT_CHAT_MESSAGES;
@@ -44,7 +43,6 @@ impl UserInfo {
     /// Mostly checks to make sure we're not loading or receiving anything undesired.
     pub fn sanitize(&mut self) {
         if self.chat_messages.is_none() || self.chat_messages.as_ref().unwrap().len() != 16 {
-            // if self.chat_messages.len() != 16 {
             self.chat_messages = Some(chat::default());
         }
     }
@@ -58,7 +56,7 @@ impl UserInfo {
 /// where this stuff is called into from the C++ side.
 #[derive(Clone, Debug)]
 pub struct UserManager {
-    http_client: Agent,
+    api_client: APIClient,
     user: Arc<Mutex<UserInfo>>,
     user_json_path: Arc<PathBuf>,
     slippi_semver: String,
@@ -74,13 +72,13 @@ impl UserManager {
     /// this restriction via some assumptions.
     // @TODO: The semver param here should get refactored away in time once we've ironed out
     // how some things get persisted from the Dolphin side. Not a big deal to thread it for now.
-    pub fn new(http_client: Agent, user_json_path: PathBuf, slippi_semver: String) -> Self {
+    pub fn new(api_client: APIClient, user_json_path: PathBuf, slippi_semver: String) -> Self {
         let user = Arc::new(Mutex::new(UserInfo::default()));
         let user_json_path = Arc::new(user_json_path);
         let watcher = Arc::new(Mutex::new(UserInfoWatcher::new()));
 
         Self {
-            http_client,
+            api_client,
             user,
             user_json_path,
             slippi_semver,
@@ -141,7 +139,7 @@ impl UserManager {
     /// Runs the `attempt_login` function on the calling thread. If you need this to run in the
     /// background, you want `watch_for_login` instead.
     pub fn attempt_login(&self) -> bool {
-        attempt_login(&self.http_client, &self.user, &self.user_json_path, &self.slippi_semver)
+        attempt_login(&self.api_client, &self.user, &self.user_json_path, &self.slippi_semver)
     }
 
     /// Kicks off a background handler for processing user authentication.
@@ -149,7 +147,7 @@ impl UserManager {
         let mut watcher = self.watcher.lock().expect("Unable to acquire user watcher lock");
 
         watcher.watch_for_login(
-            self.http_client.clone(),
+            self.api_client.clone(),
             self.user_json_path.clone(),
             self.user.clone(),
             &self.slippi_semver,
@@ -218,7 +216,7 @@ impl UserManager {
 /// Checks for the existence of a `user.json` file and, if found, attempts to load and parse it.
 ///
 /// This returns a `bool` value so that the background thread can know whether to stop checking.
-fn attempt_login(http_client: &Agent, user: &Arc<Mutex<UserInfo>>, user_json_path: &PathBuf, slippi_semver: &str) -> bool {
+fn attempt_login(api_client: &APIClient, user: &Arc<Mutex<UserInfo>>, user_json_path: &PathBuf, slippi_semver: &str) -> bool {
     match std::fs::read_to_string(user_json_path) {
         Ok(contents) => match serde_json::from_str::<UserInfo>(&contents) {
             Ok(mut info) => {
@@ -231,7 +229,7 @@ fn attempt_login(http_client: &Agent, user: &Arc<Mutex<UserInfo>>, user_json_pat
                     *lock = info;
                 }
 
-                overwrite_from_server(http_client, user, uid, slippi_semver);
+                overwrite_from_server(api_client, user, uid, slippi_semver);
                 return true;
             },
 
@@ -275,7 +273,7 @@ struct UserInfoAPIResponse {
 
 /// Calls out to the Slippi server and fetches the user info, patching up the user info object
 /// with any returned information.
-fn overwrite_from_server(http_client: &Agent, user: &Arc<Mutex<UserInfo>>, uid: String, slippi_semver: &str) {
+fn overwrite_from_server(api_client: &APIClient, user: &Arc<Mutex<UserInfo>>, uid: String, slippi_semver: &str) {
     let is_beta = match slippi_semver.contains("beta") {
         true => "-beta",
         false => "",
@@ -286,7 +284,7 @@ fn overwrite_from_server(http_client: &Agent, user: &Arc<Mutex<UserInfo>>, uid: 
 
     tracing::warn!(?url, "Fetching user info");
 
-    match http_client.get(&url).call() {
+    match api_client.get(&url).call() {
         Ok(response) => match response.into_string() {
             Ok(body) => match serde_json::from_str::<UserInfoAPIResponse>(&body) {
                 Ok(info) => {

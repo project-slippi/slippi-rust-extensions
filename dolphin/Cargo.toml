@@ -13,6 +13,7 @@ publish = false
 default = []
 ishiiruka = []
 mainline = []
+playback = []
 
 [dependencies]
 time = { workspace = true }

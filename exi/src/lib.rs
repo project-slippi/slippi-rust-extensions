@@ -5,12 +5,9 @@
 //! `SlippiEXIDevice` and forwards calls over the C FFI. This has a fairly clean mapping to "when
 //! Slippi stuff is happening" and enables us to let the Rust side live in its own world.
 
-use std::time::Duration;
-
-use ureq::AgentBuilder;
-
 use dolphin_integrations::Log;
 use slippi_game_reporter::GameReporter;
+use slippi_gg_api::APIClient;
 use slippi_jukebox::Jukebox;
 use slippi_user::UserManager;
 
@@ -41,22 +38,15 @@ impl SlippiEXIDevice {
     pub fn new(config: Config) -> Self {
         tracing::info!(target: Log::SlippiOnline, "Starting SlippiEXIDevice");
 
-        // We set `max_idle_connections` to `5` to mimic how CURL was configured in
-        // the old C++ logic. This gets cloned and passed down into modules so that
-        // the underlying connection pool is shared.
-        let http_client = AgentBuilder::new()
-            .max_idle_connections(5)
-            .timeout(Duration::from_millis(5000))
-            .user_agent(&format!("SlippiDolphin/{} (Rust)", config.scm.slippi_semver))
-            .build();
+        let api_client = APIClient::new(&config.scm.slippi_semver);
 
         let user_manager = UserManager::new(
-            http_client.clone(),
+            api_client.clone(),
             config.paths.user_json.clone().into(),
             config.scm.slippi_semver.clone(),
         );
 
-        let game_reporter = GameReporter::new(http_client.clone(), user_manager.clone(), config.paths.iso.clone());
+        let game_reporter = GameReporter::new(api_client.clone(), user_manager.clone(), config.paths.iso.clone());
 
         // Playback has no need to deal with this.
         // (We could maybe silo more?)

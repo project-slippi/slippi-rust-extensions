@@ -24,8 +24,18 @@ ishiiruka = [
     "slippi-exi-device/ishiiruka",
     "slippi-user/ishiiruka"
 ]
-mainline = []
-playback = []
+mainline = [
+    "dolphin-integrations/mainline",
+    "slippi-game-reporter/mainline",
+    "slippi-exi-device/mainline",
+    "slippi-user/mainline"
+]
+playback = [
+    "dolphin-integrations/playback",
+    "slippi-game-reporter/playback",
+    "slippi-exi-device/playback",
+    "slippi-user/playback"
+]
 
 [dependencies]
 dolphin-integrations = { path = "../dolphin" }

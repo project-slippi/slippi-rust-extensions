@@ -10,6 +10,7 @@ members = [
     "ffi",
     "game-reporter",
     "jukebox",
+    "slippi-gg-api",
     "user",
 ]
 
@@ -32,7 +33,7 @@ serde_repr = { version = "0.1" }
 # in extra dependencies.
 tracing = { version = "0.1", default-features = false, features = ["std"] }
 
-ureq = { version = "2.7.1", features = ["json"] }
+ureq = { version = "2.9.1", features = ["json"] }
 
 [patch.crates-io]
 # We need to patch this dependency to fix a bug in Windows where a crash can occur

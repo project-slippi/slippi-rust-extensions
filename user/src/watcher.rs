@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use ureq::Agent;
+use slippi_gg_api::APIClient;
 
 use super::{attempt_login, UserInfo};
 
@@ -28,7 +28,7 @@ impl UserInfoWatcher {
     /// Spins up (or re-spins-up) the background watcher thread for the `user.json` file.
     pub fn watch_for_login(
         &mut self,
-        http_client: Agent,
+        api_client: APIClient,
         user_json_path: Arc<PathBuf>,
         user: Arc<Mutex<UserInfo>>,
         slippi_semver: &str,
@@ -55,7 +55,7 @@ impl UserInfoWatcher {
                     return;
                 }
 
-                if attempt_login(&http_client, &user, &user_json_path, &slippi_semver) {
+                if attempt_login(&api_client, &user, &user_json_path, &slippi_semver) {
                     return;
                 }
 

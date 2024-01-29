@@ -10,6 +10,7 @@ publish = false
 default = []
 ishiiruka = []
 mainline = []
+playback = []
 
 [dependencies]
 chksum = { version = "0.2.2", default-features = false, features = ["md5"] }
@@ -18,6 +19,6 @@ flate2 = "1.0"
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_repr = { workspace = true }
+slippi-gg-api = { path = "../slippi-gg-api" }
 slippi-user = { path = "../user" }
 tracing = { workspace = true }
-ureq = { workspace = true }
