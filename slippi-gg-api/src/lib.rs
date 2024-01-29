@@ -44,14 +44,16 @@ impl APIClient {
     /// The returned client will only resolve to IPV4 addresses at the moment
     /// due to upstream issues with GCP flex instances and IPV6.
     pub fn new(slippi_semver: &str) -> Self {
+        let _build = "";
+
         #[cfg(feature = "mainline")]
-        let build = "mainline";
+        let _build = "mainline";
 
         #[cfg(feature = "ishiiruka")]
-        let build = "ishiiruka";
+        let _build = "ishiiruka";
 
         #[cfg(feature = "playback")]
-        let build = "playback";
+        let _build = "playback";
 
         // We set `max_idle_connections` to `5` to mimic how CURL was configured in
         // the old C++ logic. This gets cloned and passed down into modules so that
@@ -60,7 +62,7 @@ impl APIClient {
             .resolver(Ipv4Resolver)
             .max_idle_connections(5)
             .timeout(Duration::from_millis(5000))
-            .user_agent(&format!("SlippiDolphin/{} ({}) (Rust)", build, slippi_semver))
+            .user_agent(&format!("SlippiDolphin/{} ({}) (Rust)", _build, slippi_semver))
             .build();
 
         Self(http_client)
