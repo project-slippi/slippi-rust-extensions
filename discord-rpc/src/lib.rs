@@ -3,8 +3,8 @@
 //! The core of it runs in a background thread, listening for new
 //! events on each pass of its own loop.
 
-use std::thread;
 use std::sync::mpsc::{channel, Receiver, Sender};
+use std::thread;
 
 use dolphin_integrations::Log;
 
@@ -16,7 +16,7 @@ pub(crate) type Result<T> = std::result::Result<T, DiscordRPCError>;
 /// Message payloads that the inner thread listens for.
 #[derive(Debug)]
 pub enum Message {
-    Dropping
+    Dropping,
 }
 
 /// A client that watches for game events and emits status updates to

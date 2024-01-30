@@ -18,5 +18,5 @@ pub enum DiscordRPCError {
     ChannelSenderDisconnected(#[from] std::sync::mpsc::RecvError),
 
     #[error("Unknown DiscordRPC Error")]
-    Unknown
+    Unknown,
 }

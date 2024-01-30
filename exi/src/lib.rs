@@ -32,9 +32,7 @@ pub enum JukeboxConfiguration {
 /// Configuration instructions that the FFI layer uses to call over here.
 #[derive(Debug)]
 pub enum DiscordHandlerConfiguration {
-    Start {
-        ram_offset: u8
-    },
+    Start { ram_offset: u8 },
 
     Stop,
 }
@@ -83,7 +81,7 @@ impl SlippiEXIDevice {
             game_reporter,
             user_manager,
             jukebox: None,
-            discord_handler: None
+            discord_handler: None,
         }
     }
 
@@ -141,10 +139,7 @@ impl SlippiEXIDevice {
             return;
         }
 
-        if let DiscordHandlerConfiguration::Start {
-            ram_offset
-        } = config
-        {
+        if let DiscordHandlerConfiguration::Start { ram_offset } = config {
             match DiscordHandler::new(ram_offset) {
                 Ok(handler) => {
                     self.discord_handler = Some(handler);
@@ -156,7 +151,7 @@ impl SlippiEXIDevice {
                         error = ?e,
                         "Failed to start Discord handler"
                     );
-                }
+                },
             }
         }
     }
