@@ -145,7 +145,7 @@ impl SlippiEXIDevice {
         }
 
         if let DiscordHandlerConfiguration::Start { ram_offset, config } = config {
-            match DiscordHandler::new(ram_offset, config) {
+            match DiscordHandler::new(ram_offset.into(), config) {
                 Ok(handler) => {
                     self.discord_handler = Some(handler);
                 },

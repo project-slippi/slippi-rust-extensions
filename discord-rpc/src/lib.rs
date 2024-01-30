@@ -34,7 +34,7 @@ pub struct DiscordHandler {
 impl DiscordHandler {
     /// Kicks off the background thread, which monitors game state and emits
     /// updates to Discord accordingly.
-    pub fn new(ram_offset: u8, config: Config) -> Result<Self> {
+    pub fn new(ram_offset: usize, config: Config) -> Result<Self> {
         tracing::info!(target: Log::DiscordRPC, "Initializing DiscordHandler");
 
         // Create a sender and receiver channel pair to communicate between threads.
@@ -44,13 +44,13 @@ impl DiscordHandler {
         // the loop breaks - either due to shutdown or intentional drop - the underlying
         // OS thread will clean itself up.
         thread::Builder::new()
-            .name("SlippiDiscordHandler".to_string())
+            .name("DiscordHandler".to_string())
             .spawn(move || {
                 if let Err(e) = Self::start(rx, ram_offset, config) {
                     tracing::error!(
                         target: Log::DiscordRPC,
                         error = ?e,
-                        "SlippiDiscordHandler thread encountered an error: {e}"
+                        "DiscordHandler thread encountered an error: {e}"
                     );
                 }
             })
@@ -60,7 +60,7 @@ impl DiscordHandler {
     }
 
     /// Must be called on a background thread. Runs the core event loop.
-    fn start(rx: Receiver<Message>, ram_offset: u8, config: Config) -> Result<()> {
+    fn start(rx: Receiver<Message>, ram_offset: usize, config: Config) -> Result<()> {
         loop {
             match rx.recv()? {
                 // Handle any configuration updates.
