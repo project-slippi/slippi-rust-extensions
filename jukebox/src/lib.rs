@@ -29,7 +29,6 @@ pub(crate) type Result<T> = std::result::Result<T, JukeboxError>;
 pub type ForeignGetVolumeFn = unsafe extern "C" fn() -> std::ffi::c_int;
 
 const THREAD_LOOP_SLEEP_TIME_MS: u64 = 30;
-const CHILD_THREAD_COUNT: usize = 2;
 
 /// By default Slippi Jukebox plays music slightly louder than vanilla melee
 /// does. This reduces the overall music volume output to 80%. Not totally sure
@@ -85,7 +84,7 @@ enum JukeboxEvent {
 
 #[derive(Debug)]
 pub struct Jukebox {
-    channel_senders: [Sender<JukeboxEvent>; CHILD_THREAD_COUNT],
+    channel_sender: Sender<JukeboxEvent>,
 }
 
 impl Jukebox {
@@ -93,99 +92,37 @@ impl Jukebox {
     /// to try and read game memory and play music. When the returned instance is
     /// dropped, the child threads will terminate and the music will stop.
     pub fn new(m_p_ram: *const u8, iso_path: String, get_dolphin_volume_fn: ForeignGetVolumeFn) -> Result<Self> {
-        tracing::info!(target: Log::Jukebox, "Initializing Slippi Jukebox");
+        tracing::info!(target: Log::Jukebox, "Initializing Slippi Jukebox (TEST BUILD)");
 
         // We are implicitly trusting that these pointers will outlive the jukebox instance
         let m_p_ram = m_p_ram as usize;
         let get_dolphin_volume = move || unsafe { get_dolphin_volume_fn() } as f32 / 100.0;
 
-        // This channel is used for the `JukeboxMessageDispatcher` thread to send
-        // messages to the `JukeboxMusicPlayer` thread
-        let (melee_event_tx, melee_event_rx) = channel::<MeleeEvent>();
-
         // These channels allow the jukebox instance to notify both child
         // threads when something important happens. Currently its only purpose
         // is to notify them that the instance is about to be dropped so they
         // should terminate
-        let (message_dispatcher_thread_tx, message_dispatcher_thread_rx) = channel::<JukeboxEvent>();
-        let (music_thread_tx, music_thread_rx) = channel::<JukeboxEvent>();
-
-        // Spawn message dispatcher thread
-        std::thread::Builder::new()
-            .name("JukeboxMessageDispatcher".to_string())
-            .spawn(move || {
-                match Self::dispatch_messages(m_p_ram, get_dolphin_volume, message_dispatcher_thread_rx, melee_event_tx) {
-                    Err(e) => tracing::error!(
-                        target: Log::Jukebox,
-                        error = ?e,
-                        "JukeboxMessageDispatcher thread encountered an error: {e}"
-                    ),
-                    _ => (),
-                }
-            })
-            .map_err(ThreadSpawn)?;
+        let (tx, rx) = channel::<JukeboxEvent>();
 
         // Spawn music player thread
         std::thread::Builder::new()
             .name("JukeboxMusicPlayer".to_string())
-            .spawn(
-                move || match Self::play_music(m_p_ram, &iso_path, get_dolphin_volume, music_thread_rx, melee_event_rx) {
-                    Err(UnsupportedIso) => Dolphin::add_osd_message(
-                        Color::Red,
-                        OSDDuration::VeryLong,
-                        "\nYour ISO is not supported by Slippi Jukebox. Music will not play.",
-                    ),
-                    Err(e) => tracing::error!(
-                        target: Log::Jukebox,
-                        error = ?e,
-                        "JukeboxMusicPlayer thread encountered an error: {e}"
-                    ),
-                    _ => (),
-                },
-            )
+            .spawn(move || match Self::play_music(m_p_ram, &iso_path, get_dolphin_volume, rx) {
+                Err(UnsupportedIso) => Dolphin::add_osd_message(
+                    Color::Red,
+                    OSDDuration::VeryLong,
+                    "\nYour ISO is not supported by Slippi Jukebox. Music will not play.",
+                ),
+                Err(e) => tracing::error!(
+                    target: Log::Jukebox,
+                    error = ?e,
+                    "JukeboxMusicPlayer thread encountered an error: {e}"
+                ),
+                _ => (),
+            })
             .map_err(ThreadSpawn)?;
 
-        Ok(Self {
-            channel_senders: [message_dispatcher_thread_tx, music_thread_tx],
-        })
-    }
-
-    /// This thread continuously reads select values from game memory as well
-    /// as the current `volume` value in the dolphin configuration. If it
-    /// notices anything change, it will dispatch a message to the
-    /// `JukeboxMusicPlayer` thread.
-    fn dispatch_messages(
-        m_p_ram: usize,
-        get_dolphin_volume: impl Fn() -> f32,
-        message_dispatcher_thread_rx: Receiver<JukeboxEvent>,
-        melee_event_tx: Sender<MeleeEvent>,
-    ) -> Result<()> {
-        // Initial "dolphin state" that will get updated over time
-        let mut prev_state = DolphinGameState::default();
-
-        loop {
-            // Stop the thread if the jukebox instance will be been dropped
-            if let Ok(event) = message_dispatcher_thread_rx.try_recv() {
-                if matches!(event, JukeboxEvent::Dropped) {
-                    return Ok(());
-                }
-            }
-
-            // Continuously check if the dolphin state has changed
-            let state = Self::read_dolphin_game_state(&m_p_ram, get_dolphin_volume())?;
-
-            // If the state has changed,
-            if prev_state != state {
-                // dispatch a message to the music player thread
-                let event = Self::produce_melee_event(&prev_state, &state);
-                tracing::info!(target: Log::Jukebox, "{:?}", event);
-
-                melee_event_tx.send(event).ok();
-                prev_state = state;
-            }
-
-            sleep(Duration::from_millis(THREAD_LOOP_SLEEP_TIME_MS));
-        }
+        Ok(Self { channel_sender: tx })
     }
 
     /// This thread listens for incoming messages from the
@@ -196,7 +133,6 @@ impl Jukebox {
         iso_path: &str,
         get_dolphin_volume: impl Fn() -> f32,
         music_thread_rx: Receiver<JukeboxEvent>,
-        melee_event_rx: Receiver<MeleeEvent>,
     ) -> Result<()> {
         tracing::info!(target: Log::Jukebox, "Loading track metadata...");
         let tracks = fst::create_track_map(&iso_path)?;
@@ -217,6 +153,9 @@ impl Jukebox {
         let initial_state = Self::read_dolphin_game_state(&m_p_ram, get_dolphin_volume())?;
         let mut volume = initial_state.volume;
         let mut track_id: Option<TrackId> = None;
+
+        // Initial "dolphin state" that will get updated over time
+        let mut prev_state = DolphinGameState::default();
 
         loop {
             if let Some(track_id) = track_id {
@@ -251,10 +190,17 @@ impl Jukebox {
                     }
                 }
 
-                // When we receive an event, handle it. This can include
-                // changing the volume or updating the track and breaking
-                // the inner loop such that the next track starts to play
-                if let Ok(event) = melee_event_rx.try_recv() {
+                // Continuously check if the dolphin state has changed
+                let state = Self::read_dolphin_game_state(&m_p_ram, get_dolphin_volume())?;
+
+                // If the state has changed,
+                if prev_state != state {
+                    // dispatch a message to the music player thread
+                    let event = Self::produce_melee_event(&prev_state, &state);
+                    tracing::info!(target: Log::Jukebox, "{:?}", event);
+
+                    prev_state = state;
+
                     if let Break(_) = Self::handle_melee_event(event, &sink, &mut track_id, &mut volume, &random_menu_tracks) {
                         break;
                     }
@@ -402,13 +348,11 @@ impl Jukebox {
 impl Drop for Jukebox {
     fn drop(&mut self) {
         tracing::info!(target: Log::Jukebox, "Dropping Slippi Jukebox");
-        for sender in &self.channel_senders {
-            if let Err(e) = sender.send(JukeboxEvent::Dropped) {
-                tracing::warn!(
-                    target: Log::Jukebox,
-                    "Failed to notify child thread that Jukebox is dropping: {e}"
-                );
-            }
+        if let Err(e) = &self.channel_sender.send(JukeboxEvent::Dropped) {
+            tracing::warn!(
+                target: Log::Jukebox,
+                "Failed to notify child thread that Jukebox is dropping: {e}"
+            );
         }
     }
 }
