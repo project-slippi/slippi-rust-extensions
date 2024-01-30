@@ -10,7 +10,7 @@ use std::time::Duration;
 use ureq::AgentBuilder;
 
 use dolphin_integrations::Log;
-use slippi_discord_rpc::DiscordHandler;
+use slippi_discord_rpc::{Config as DiscordHandlerConfig, DiscordHandler};
 use slippi_game_reporter::GameReporter;
 use slippi_jukebox::Jukebox;
 use slippi_user::UserManager;
@@ -32,8 +32,8 @@ pub enum JukeboxConfiguration {
 /// Configuration instructions that the FFI layer uses to call over here.
 #[derive(Debug)]
 pub enum DiscordHandlerConfiguration {
-    Start { ram_offset: u8 },
-
+    Start { ram_offset: u8, config: DiscordHandlerConfig },
+    UpdateConfig { config: DiscordHandlerConfig },
     Stop,
 }
 
@@ -134,13 +134,18 @@ impl SlippiEXIDevice {
             return;
         }
 
-        if self.discord_handler.is_some() {
+        if let Some(discord_handler) = &mut self.discord_handler {
+            if let DiscordHandlerConfiguration::UpdateConfig { config } = config {
+                discord_handler.update_config(config);
+                return;
+            }
+
             tracing::warn!(target: Log::SlippiOnline, "Discord handler is already running.");
             return;
         }
 
-        if let DiscordHandlerConfiguration::Start { ram_offset } = config {
-            match DiscordHandler::new(ram_offset) {
+        if let DiscordHandlerConfiguration::Start { ram_offset, config } = config {
+            match DiscordHandler::new(ram_offset, config) {
                 Ok(handler) => {
                     self.discord_handler = Some(handler);
                 },

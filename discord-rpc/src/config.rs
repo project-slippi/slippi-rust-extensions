@@ -1,24 +1,7 @@
-use preferences::{AppInfo, Preferences};
-use ruspiro_singleton::Singleton;
-
-use crate::melee::SlippiMenuScene;
-
-pub const APP_INFO: AppInfo = AppInfo {
-    name: "conf",
-    author: "Slippi Discord Integration",
-};
-const PREFS_KEY: &str = "app_config";
-
-pub static CONFIG: Singleton<AppConfig> = Singleton::lazy(&|| {
-    match AppConfig::load(&APP_INFO, PREFS_KEY) {
-        Ok(cfg) => cfg,
-        Err(_) => AppConfig::default()
-    }
-});
-
 structstruck::strike! {
-    #[strikethrough[derive(Serialize, Deserialize, PartialEq, Debug)]]
-    pub struct AppConfig {
+    /// Core configuration object for this library.
+    #[strikethrough[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq)]]
+    pub struct Config {
         pub global: struct {
             pub show_in_game_character: bool,
             pub show_in_game_time: bool
@@ -68,12 +51,12 @@ structstruck::strike! {
     }
 }
 
-impl Default for AppConfig {
+impl Default for Config {
     fn default() -> Self {
-        AppConfig {
+        Config {
             global: Global {
                 show_in_game_character: true,
-                show_in_game_time: true
+                show_in_game_time: true,
             },
             slippi: Slippi {
                 enabled: true,
@@ -83,39 +66,34 @@ impl Default for AppConfig {
                     enabled: true,
                     show_rank: true,
                     show_view_ranked_profile_button: true,
-                    show_score: true
+                    show_score: true,
                 },
                 unranked: Unranked { enabled: true },
                 direct: Direct { enabled: true },
-                teams: Teams { enabled: true }
+                teams: Teams { enabled: true },
             },
             uncle_punch: UnclePunch { enabled: true },
             vs_mode: VsMode { enabled: true },
             training_mode: TrainingMode { enabled: true },
             stadium: Stadium {
                 enabled: true,
-                hrc: Hrc {
-                    enabled: true
-                },
+                hrc: Hrc { enabled: true },
                 btt: Btt {
                     enabled: true,
-                    show_stage_name: true
+                    show_stage_name: true,
                 },
-                mmm: Mmm {
-                    enabled: true
-                }
-            }
+                mmm: Mmm { enabled: true },
+            },
         }
     }
 }
 
-pub fn write_config(val: &AppConfig) {
-    let _ = val.save(&APP_INFO, PREFS_KEY);
-}
-
 // Utility implementations
+// Commented out for the moment
+/*
+use crate::melee::SlippiMenuScene;
 impl SlippiMenuScene {
-    pub fn is_enabled(&self, c: &AppConfig) -> bool {
+    pub fn is_enabled(&self, c: &Config) -> bool {
         match *self {
             SlippiMenuScene::Ranked => c.slippi.ranked.enabled,
             SlippiMenuScene::Unranked => c.slippi.unranked.enabled,
@@ -123,4 +101,4 @@ impl SlippiMenuScene {
             SlippiMenuScene::Teams => c.slippi.teams.enabled
         }
     }
-}
+}*/
