@@ -19,8 +19,8 @@ pub(crate) type Result<T> = std::result::Result<T, DiscordRPCError>;
 /// Message payloads that the inner thread listens for.
 #[derive(Debug)]
 pub enum Message {
-    ConfigUpdate(Config),
     Dropping,
+    UpdateConfig(Config),
 }
 
 /// A client that watches for game events and emits status updates to
@@ -61,12 +61,24 @@ impl DiscordHandler {
 
     /// Must be called on a background thread. Runs the core event loop.
     fn start(rx: Receiver<Message>, ram_offset: u8, config: Config) -> Result<()> {
+        loop {
+            match rx.recv()? {
+                // Handle any configuration updates.
+                Message::UpdateConfig(config) => {},
+
+                // Just break the loop so things exit cleanly.
+                Message::Dropping => {
+                    break;
+                },
+            }
+        }
+
         Ok(())
     }
 
     /// Passes a new configuration into the background handler.
     pub fn update_config(&mut self, config: Config) {
-        if let Err(e) = self.tx.send(Message::ConfigUpdate(config)) {
+        if let Err(e) = self.tx.send(Message::UpdateConfig(config)) {
             // @TODO: Maybe add an OSD log message here?
 
             tracing::error!(
