@@ -23,6 +23,7 @@ debug = true
 panic = "abort"
 
 [workspace.dependencies]
+thiserror = "1.0.44"
 time = { version = "0.3.20", default-features = false, features = ["std", "local-offset"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }

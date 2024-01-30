@@ -53,6 +53,9 @@ pub mod Log {
 
     /// Can be used to segment Jukebox logs.
     pub const Jukebox: &'static str = "SLIPPI_RUST_JUKEBOX";
+
+    /// Used for any logs specific to the Discord RPC library.
+    pub const DiscordRPC: &'static str = "SLIPPI_DISCORD_RPC";
 }
 
 /// Represents a `LogContainer` on the Dolphin side.

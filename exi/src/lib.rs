@@ -10,15 +10,34 @@ use std::time::Duration;
 use ureq::AgentBuilder;
 
 use dolphin_integrations::Log;
+use slippi_discord_rpc::DiscordHandler;
 use slippi_game_reporter::GameReporter;
 use slippi_jukebox::Jukebox;
 use slippi_user::UserManager;
-// Addition to existing imports
-use slippi_discord_rpc::DiscordClientRequest; // This assumes slippi-discord-rpc has this type or function.
-use slippi_discord_rpc::DiscordClientRequestType; // Adjust this as necessary based on actual module contents.
 
 mod config;
 pub use config::{Config, FilePathsConfig, SCMConfig};
+
+/// Configuration instructions that the FFI layer uses to call over here.
+#[derive(Debug)]
+pub enum JukeboxConfiguration {
+    Start {
+        initial_dolphin_system_volume: u8,
+        initial_dolphin_music_volume: u8,
+    },
+
+    Stop,
+}
+
+/// Configuration instructions that the FFI layer uses to call over here.
+#[derive(Debug)]
+pub enum DiscordHandlerConfiguration {
+    Start {
+        ram_offset: u8
+    },
+
+    Stop,
+}
 
 /// An EXI Device subclass specific to managing and interacting with the game itself.
 #[derive(Debug)]
@@ -27,15 +46,7 @@ pub struct SlippiEXIDevice {
     pub game_reporter: GameReporter,
     pub user_manager: UserManager,
     pub jukebox: Option<Jukebox>,
-    discord_client: Option<DiscordClient>,
-}
-
-pub enum JukeboxConfiguration {
-    Start {
-        initial_dolphin_system_volume: u8,
-        initial_dolphin_music_volume: u8,
-    },
-    Stop,
+    pub discord_handler: Option<DiscordHandler>,
 }
 
 impl SlippiEXIDevice {
@@ -72,30 +83,10 @@ impl SlippiEXIDevice {
             game_reporter,
             user_manager,
             jukebox: None,
+            discord_handler: None
         }
     }
-    pub fn start_discord_client(&mut self) {
-        if self.discord_client.is_some() {
-            tracing::info!(target: Log::SlippiOnline, "Discord client is already running.");
-            return;
-        }
 
-        match DiscordClient::new() { // Replace with the actual API call to create a new Discord client instance.
-            Ok(client) => {
-                self.discord_client = Some(client);
-                tracing::info!(target: Log::SlippiOnline, "Discord client started successfully.");
-
-                // If needed, run the Discord client in the background, for example with a Tokio task.
-                // This will require the Discord client to be 'Send' if it is moved to an async block.
-                tokio::spawn(async move {
-                    self.discord_client.as_mut().unwrap().run().await;
-                });
-            }
-            Err(e) => {
-                tracing::error!(target: Log::SlippiOnline, "Failed to start Discord client due to {:?}", e);
-            }
-        }
-    }
     /// Stubbed for now, but this would get called by the C++ EXI device on DMAWrite.
     pub fn dma_write(&mut self, _address: usize, _size: usize) {}
 
@@ -133,6 +124,39 @@ impl SlippiEXIDevice {
                     error = ?e,
                     "Failed to start Jukebox"
                 ),
+            }
+        }
+    }
+
+    /// Configures a new Discord handler, or ensures an existing one is dropped if it's being
+    /// disabled.
+    pub fn configure_discord_handler(&mut self, config: DiscordHandlerConfiguration) {
+        if let DiscordHandlerConfiguration::Stop = config {
+            self.discord_handler = None;
+            return;
+        }
+
+        if self.discord_handler.is_some() {
+            tracing::warn!(target: Log::SlippiOnline, "Discord handler is already running.");
+            return;
+        }
+
+        if let DiscordHandlerConfiguration::Start {
+            ram_offset
+        } = config
+        {
+            match DiscordHandler::new(ram_offset) {
+                Ok(handler) => {
+                    self.discord_handler = Some(handler);
+                },
+
+                Err(e) => {
+                    tracing::error!(
+                        target: Log::SlippiOnline,
+                        error = ?e,
+                        "Failed to start Discord handler"
+                    );
+                }
             }
         }
     }

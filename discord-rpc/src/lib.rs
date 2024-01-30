@@ -1,87 +1,78 @@
-// TODO Sessions - each scene has a minor 0 which is the css. if you leave the major scene, the session ends, otherwise when not in-game we show when the session started
-// ^ option name "Show overall game session when not in-game" 
-// TODO HRC & BTT Records in discord
-// TODO Ranked match score, button "Viw opponent ranked profile", show details in stage striking already (in discord rich presence, signalize that you are in stage striking as well)
-// TODO clean up melee.rs, move structs/enums away in coherent bundles
-//#![windows_subsystem = "windows"]
-#![feature(generic_const_exprs)]
+//! This module implements native Discord integration for Slippi.
+//!
+//! The core of it runs in a background thread, listening for new
+//! events on each pass of its own loop.
 
-#[macro_use]
-extern crate serde_derive;
-
-use discord::{DiscordClientRequest, DiscordClientRequestType};
-use single_instance::SingleInstance;
-use std::sync::{mpsc, Arc, Mutex};
-use util::sleep;
 use std::thread;
-use std::sync::mpsc::TryRecvError;
+use std::sync::mpsc::{channel, Receiver, Sender};
 
-use crate::tray::MeleeTrayEvent;
+use dolphin_integrations::Log;
 
-mod config;
-mod discord;
-mod tray;
-mod rank;
-mod util;
-mod melee;
+mod error;
+pub use error::DiscordRPCError;
 
-fn main() {
-    let instance = SingleInstance::new("SLIPPI_DISCORD_RICH_PRESENCE_MTX").unwrap();
-    assert!(instance.is_single());
-    let (tx, rx) = mpsc::channel::<DiscordClientRequest>();
-    let (mtx, mrx) = mpsc::channel::<MeleeTrayEvent>();
+pub(crate) type Result<T> = std::result::Result<T, DiscordRPCError>;
 
-    let cancel_token = Arc::new(Mutex::new(false));
+/// Message payloads that the inner thread listens for.
+#[derive(Debug)]
+pub enum Message {
+    Dropping
+}
 
-    {
-        let cancel_token = cancel_token.clone();
-        thread::spawn(move || {
-            while !*cancel_token.lock().unwrap() {
-                let discord_tx = tx.clone();
-                let tray_tx = mtx.clone();
-                // The loop is now managed by a simple spawning of a new thread after a crash
-                match thread::spawn(move || {
-                    let mut client = melee::MeleeClient::new();
-                    client.run(discord_tx, tray_tx);
-                }).join() {
-                    Ok(_) => { /* handle successful exit */ },
-                    Err(_) => {
-                        // panic
-                        let _ = tx.send(DiscordClientRequest::clear());
-                        println!("[ERROR] Melee Client crashed. Restarting...");
-                        sleep(500);
-                    }
+/// A client that watches for game events and emits status updates to
+/// Discord. This is effectively just a message passing route for the
+/// background thread, which does all the actual work.
+#[derive(Debug)]
+pub struct DiscordHandler {
+    tx: Sender<Message>,
+}
+
+impl DiscordHandler {
+    /// Kicks off the background thread, which monitors game state and emits
+    /// updates to Discord accordingly.
+    pub fn new(ram_offset: u8) -> Result<Self> {
+        tracing::info!(target: Log::DiscordRPC, "Initializing DiscordRPC");
+
+        // Create a sender and receiver channel pair to communicate between threads.
+        let (tx, rx) = channel::<Message>();
+
+        // Spawn a new background thread that manages its own loop. If or when
+        // the loop breaks - either due to shutdown or intentional drop - the underlying
+        // OS thread will clean itself up.
+        thread::Builder::new()
+            .name("SlippiDiscordRPC".to_string())
+            .spawn(move || {
+                if let Err(e) = Self::start(rx, ram_offset) {
+                    tracing::error!(
+                        target: Log::DiscordRPC,
+                        error = ?e,
+                        "SlippiDiscordRPC thread encountered an error: {e}"
+                    );
                 }
-            }
-        });
+            })
+            .map_err(error::DiscordRPCError::ThreadSpawn)?;
+
+        Ok(Self { tx })
     }
 
-    let discord_cancel_token = cancel_token.clone();
-    thread::spawn(move || {
-        let mut discord_client = discord::start_client().unwrap();
+    /// Must be called on a background thread. Runs the core event loop.
+    fn start(rx: Receiver<Message>, ram_offset: u8) -> Result<()> {
+        Ok(())
+    }
+}
 
-        while !*discord_cancel_token.lock().unwrap() {
-            let poll_res = rx.try_recv();
-            match poll_res {
-                Ok(msg) => {
-                    println!("{:?}", msg);
-                    match msg.req_type {
-                        DiscordClientRequestType::Queue => discord_client.queue(msg.scene, msg.character),
-                        DiscordClientRequestType::Idle => discord_client.idle(msg.scene, msg.character),
-                        DiscordClientRequestType::Game => discord_client.game(msg.stage, msg.character, msg.mode, msg.timestamp, msg.opp_name),
-                        DiscordClientRequestType::Mainmenu => discord_client.main_menu(),
-                        DiscordClientRequestType::Clear => discord_client.clear()
-                    }
-                },
-                Err(TryRecvError::Disconnected) => break,
-                Err(TryRecvError::Empty) => {}
-            }
+impl Drop for DiscordHandler {
+    /// Notifies the background thread that we're dropping. The thread should
+    /// listen for the message and break its runloop accordingly.
+    fn drop(&mut self) {
+        tracing::info!(target: Log::DiscordRPC, "Dropping DiscordRPC");
+
+        if let Err(e) = self.tx.send(Message::Dropping) {
+            tracing::warn!(
+                target: Log::DiscordRPC,
+                error = ?e,
+                "Failed to notify child thread that DiscordRPC is dropping"
+            );
         }
-        discord_client.close();
-    });
-
-    tray::run_tray(mrx); // synchronous
-
-    // cleanup
-    *cancel_token.lock().unwrap() = true;
+    }
 }
