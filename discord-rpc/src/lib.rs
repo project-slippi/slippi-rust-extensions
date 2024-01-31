@@ -81,19 +81,18 @@ enum DiscordRPCEvent {
 }
 
 #[derive(Debug)]
-pub struct DiscordRPC {
+pub struct DiscordActivityHandler {
     channel_senders: [Sender<DiscordRPCEvent>; CHILD_THREAD_COUNT],
 }
 
-impl DiscordRPC {
+impl DiscordActivityHandler {
     /// Returns a DiscordRPC instance that will immediately spawn two child threads
     /// to try and read game memory and play music. When the returned instance is
     /// dropped, the child threads will terminate and the music will stop.
-    pub fn new(m_p_ram: *const u8, iso_path: String, get_dolphin_volume_fn: ForeignGetVolumeFn) -> Result<Self>  {
+    pub fn new(m_p_ram: usize, iso_path: String, get_dolphin_volume_fn: ForeignGetVolumeFn) -> Result<Self>  {
         tracing::info!(target: Log::DiscordRPC, "Initializing Slippi Discord RPC");
 
         // We are implicitly trusting that these pointers will outlive the jukebox instance
-        let m_p_ram = m_p_ram as usize;
         let get_dolphin_volume = move || unsafe { get_dolphin_volume_fn() } as f32 / 100.0;
 
         // This channel is used for the `DiscordRPCMessageDispatcher` thread to send
@@ -298,14 +297,14 @@ impl DiscordRPC {
     }
 }
 
-impl Drop for DiscordRPC {
+impl Drop for DiscordActivityHandler {
     fn drop(&mut self) {
-        tracing::info!(target: Log::DiscordRPC, "Dropping Slippi DiscordRPC");
+        tracing::info!(target: Log::DiscordRPC, "Dropping Slippi DiscordActivityHandler");
         for sender in &self.channel_senders {
             if let Err(e) = sender.send(DiscordRPCEvent::Dropped) {
                 tracing::warn!(
                     target: Log::DiscordRPC,
-                    "Failed to notify child thread that DiscordRPC is dropping: {e}"
+                    "Failed to notify child thread that DiscordActivityHandler is dropping: {e}"
                 );
             }
         }

@@ -10,7 +10,7 @@ use std::time::Duration;
 use ureq::AgentBuilder;
 
 use dolphin_integrations::Log;
-use slippi_discord_rpc::{Config as DiscordHandlerConfig, DiscordHandler};
+use slippi_discord_rpc::{Config as DiscordActivityHandlerConfig, DiscordActivityHandler};
 use slippi_game_reporter::GameReporter;
 use slippi_jukebox::Jukebox;
 use slippi_user::UserManager;
@@ -31,9 +31,9 @@ pub enum JukeboxConfiguration {
 
 /// Configuration instructions that the FFI layer uses to call over here.
 #[derive(Debug)]
-pub enum DiscordHandlerConfiguration {
-    Start { ram_offset: u8, config: DiscordHandlerConfig },
-    UpdateConfig { config: DiscordHandlerConfig },
+pub enum DiscordActivityHandlerConfiguration {
+    Start { m_p_ram: usize, config: DiscordActivityHandlerConfig },
+    UpdateConfig { config: DiscordActivityHandlerConfig },
     Stop,
 }
 
@@ -44,7 +44,7 @@ pub struct SlippiEXIDevice {
     pub game_reporter: GameReporter,
     pub user_manager: UserManager,
     pub jukebox: Option<Jukebox>,
-    pub discord_handler: Option<DiscordHandler>,
+    pub discord_handler: Option<DiscordActivityHandler>,
 }
 
 impl SlippiEXIDevice {
@@ -91,6 +91,16 @@ impl SlippiEXIDevice {
     /// Stubbed for now, but this would get called by the C++ EXI device on DMARead.
     pub fn dma_read(&mut self, _address: usize, _size: usize) {}
 
+    /// Called when the Memory system on Dolphin has initialized - i.e, when it's safe to
+    /// check and read the offset for memory watching. This launches any background tasks that
+    /// need access to that parameter.
+    pub fn on_memory_initialized(&mut self, m_p_ram: usize) {
+        self.configure_discord_handler(DiscordActivityHandlerConfiguration::Start {
+            m_p_ram,
+            config: DiscordActivityHandlerConfig::default()
+        });
+    }
+
     /// Configures a new Jukebox, or ensures an existing one is dropped if it's being disabled.
     pub fn configure_jukebox(&mut self, config: JukeboxConfiguration) {
         if let JukeboxConfiguration::Stop = config {
@@ -128,14 +138,14 @@ impl SlippiEXIDevice {
 
     /// Configures a new Discord handler, or ensures an existing one is dropped if it's being
     /// disabled.
-    pub fn configure_discord_handler(&mut self, config: DiscordHandlerConfiguration) {
-        if let DiscordHandlerConfiguration::Stop = config {
+    pub fn configure_discord_handler(&mut self, config: DiscordActivityHandlerConfiguration) {
+        if let DiscordActivityHandlerConfiguration::Stop = config {
             self.discord_handler = None;
             return;
         }
 
         if let Some(discord_handler) = &mut self.discord_handler {
-            if let DiscordHandlerConfiguration::UpdateConfig { config } = config {
+            if let DiscordActivityHandlerConfiguration::UpdateConfig { config } = config {
                 discord_handler.update_config(config);
                 return;
             }
@@ -144,8 +154,8 @@ impl SlippiEXIDevice {
             return;
         }
 
-        if let DiscordHandlerConfiguration::Start { ram_offset, config } = config {
-            match DiscordHandler::new(ram_offset.into(), config) {
+        if let DiscordActivityHandlerConfiguration::Start { m_p_ram, config } = config {
+            match DiscordActivityHandler::new(m_p_ram, config) {
                 Ok(handler) => {
                     self.discord_handler = Some(handler);
                 },

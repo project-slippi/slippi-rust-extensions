@@ -66,6 +66,11 @@ uintptr_t slprs_exi_device_create(SlippiRustEXIConfig config);
 /// can safely shut down and clean up.
 void slprs_exi_device_destroy(uintptr_t exi_device_instance_ptr);
 
+/// This method is for the C++ side to notify that the Memory system is initialized and ready
+/// for use; the EXI device can then initialize any systems it needs that rely on the offset.
+void slprs_exi_device_on_memory_initialized(uintptr_t exi_device_instance_ptr,
+                                            const uint8_t *m_pRAM);
+
 /// This method should be called from the EXI device subclass shim that's registered on
 /// the Dolphin side, corresponding to:
 ///
