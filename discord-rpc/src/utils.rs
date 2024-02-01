@@ -1,10 +1,4 @@
-use std::fs::File;
-use std::io::{Read, Seek};
-
 use crate::scenes::scene_ids::*;
-use crate::{DiscordRPCError::*, Result};
-
-
 
 /// Returns true if the user is in an actual match
 /// Sourced from M'Overlay: https://github.com/bkacjios/m-overlay/blob/d8c629d/source/melee.lua#L1177

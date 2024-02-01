@@ -10,7 +10,7 @@ use std::time::Duration;
 use ureq::AgentBuilder;
 
 use dolphin_integrations::Log;
-use slippi_discord_rpc::{Config as DiscordActivityHandlerConfig, DiscordActivityHandler};
+use slippi_discord_rpc::DiscordActivityHandler;
 use slippi_game_reporter::GameReporter;
 use slippi_jukebox::Jukebox;
 use slippi_user::UserManager;
@@ -32,8 +32,7 @@ pub enum JukeboxConfiguration {
 /// Configuration instructions that the FFI layer uses to call over here.
 #[derive(Debug)]
 pub enum DiscordActivityHandlerConfiguration {
-    Start { m_p_ram: usize, config: DiscordActivityHandlerConfig },
-    UpdateConfig { config: DiscordActivityHandlerConfig },
+    Start { m_p_ram: usize },
     Stop,
 }
 
@@ -95,10 +94,7 @@ impl SlippiEXIDevice {
     /// check and read the offset for memory watching. This launches any background tasks that
     /// need access to that parameter.
     pub fn on_memory_initialized(&mut self, m_p_ram: usize) {
-        self.configure_discord_handler(DiscordActivityHandlerConfiguration::Start {
-            m_p_ram,
-            config: DiscordActivityHandlerConfig::default()
-        });
+        self.configure_discord_handler(DiscordActivityHandlerConfiguration::Start { m_p_ram });
     }
 
     /// Configures a new Jukebox, or ensures an existing one is dropped if it's being disabled.
@@ -144,18 +140,18 @@ impl SlippiEXIDevice {
             return;
         }
 
-        if let Some(discord_handler) = &mut self.discord_handler {
-            if let DiscordActivityHandlerConfiguration::UpdateConfig { config } = config {
-                discord_handler.update_config(config);
-                return;
-            }
+        // if let Some(discord_handler) = &mut self.discord_handler {
+        //     if let DiscordActivityHandlerConfiguration::UpdateConfig { config } = config {
+        //         // discord_handler.update_config(config);
+        //         return;
+        //     }
 
-            tracing::warn!(target: Log::SlippiOnline, "Discord handler is already running.");
-            return;
-        }
+        //     tracing::warn!(target: Log::SlippiOnline, "Discord handler is already running.");
+        //     return;
+        // }
 
-        if let DiscordActivityHandlerConfiguration::Start { m_p_ram, config } = config {
-            match DiscordActivityHandler::new(m_p_ram, config) {
+        if let DiscordActivityHandlerConfiguration::Start { m_p_ram } = config {
+            match DiscordActivityHandler::new(m_p_ram) {
                 Ok(handler) => {
                     self.discord_handler = Some(handler);
                 },
