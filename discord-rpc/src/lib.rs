@@ -1,19 +1,23 @@
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::{thread::sleep, time::Duration};
+use std::{
+    result::Result as StdResult,
+    sync::mpsc::{channel, Receiver, Sender},
+    thread::{self, sleep},
+    time::Duration,
+};
 
 use dolphin_integrations::Log;
-use process_memory::{LocalMember, Memory};
+use process_memory::{DataMember, LocalMember, Memory};
 
 mod errors;
-pub use errors::DiscordRPCError;
+use crate::errors::DiscordRPCError;
 use DiscordRPCError::*;
 
 mod scenes;
-use scenes::scene_ids::*;
+use crate::scenes::scene_ids::*;
 
 mod utils;
 
-pub(crate) type Result<T> = std::result::Result<T, DiscordRPCError>;
+pub(crate) type Result<T> = StdResult<T, DiscordRPCError>;
 
 const THREAD_LOOP_SLEEP_TIME_MS: u64 = 30;
 
@@ -58,7 +62,7 @@ enum MeleeEvent {
 
 #[derive(Debug, Clone)]
 enum Message {
-    Dropped,
+    Exit,
 }
 
 #[derive(Debug)]
@@ -67,70 +71,47 @@ pub struct DiscordActivityHandler {
 }
 
 impl DiscordActivityHandler {
-    /// Returns a DiscordRPC instance that will immediately spawn two child threads
-    /// to try and read game memory and play music. When the returned instance is
-    /// dropped, the child threads will terminate and the music will stop.
+    /// Initialize a new DiscordRPC instance, spawning threads for
+    /// message dispatching with game state monitoring.
     pub fn new(m_p_ram: usize) -> Result<Self> {
-        tracing::info!(target: Log::DiscordRPC, "Initializing Slippi Discord RPC");
-
-        // These channels allow the jukebox instance to notify both child
-        // threads when something important happens. Currently its only purpose
-        // is to notify them that the instance is about to be dropped so they
-        // should terminate
         let (tx, rx) = channel::<Message>();
 
         // Spawn message dispatcher thread
-        std::thread::Builder::new()
+        let _ = thread::Builder::new()
             .name("DiscordRPCMessageDispatcher".to_string())
-            .spawn(move || match Self::dispatch_messages(m_p_ram, rx) {
-                Err(e) => tracing::error!(
-                    target: Log::DiscordRPC,
-                    error = ?e,
-                    "DiscordRPCMessageDispatcher thread encountered an error: {e}"
-                ),
-                _ => (),
+            .spawn(move || {
+                if let Err(e) = Self::message_dispatcher(m_p_ram, rx) {
+                    eprintln!("Error in dispatcher: {}", e);
+                }
             })
-            .map_err(ThreadSpawn)?;
+            .map_err(|_| ThreadSpawn);
 
         Ok(Self { tx })
     }
 
-    /// This thread continuously reads select values from game memory as well
-    /// as the current `volume` value in the dolphin configuration. If it
-    /// notices anything change, it will dispatch a message to the
-    /// `DiscordRPCMusicPlayer` thread.
-    fn dispatch_messages(m_p_ram: usize, rx: Receiver<Message>) -> Result<()> {
-        // Initial "dolphin state" that will get updated over time
+    /// This thread dispatches messages based on game state changes.
+    fn message_dispatcher(m_p_ram: usize, rx: Receiver<Message>) -> Result<()> {
         let mut prev_state = DolphinGameState::default();
 
         loop {
-            // Stop the thread if the jukebox instance will be been dropped
-            if let Ok(event) = rx.try_recv() {
-                if matches!(event, Message::Dropped) {
-                    return Ok(());
-                }
+            if let Ok(Message::Exit) = rx.try_recv() {
+                return Ok(());
             }
 
-            // Continuously check if the dolphin state has changed
             let state = Self::read_dolphin_game_state(&m_p_ram)?;
-
-            // If the state has changed,
-            if prev_state != state {
-                // dispatch a message to the music player thread
+            if state != prev_state {
                 let event = Self::produce_melee_event(&prev_state, &state);
                 tracing::info!(target: Log::DiscordRPC, "{:?}", event);
-
-                // TODO: Do something with the event
-
                 prev_state = state;
             }
-
             sleep(Duration::from_millis(THREAD_LOOP_SLEEP_TIME_MS));
         }
     }
 
-    /// Given the previous dolphin state and current dolphin state, produce an event
-    fn produce_melee_event(prev_state: &DolphinGameState, state: &DolphinGameState) -> MeleeEvent {
+     /// Given the previous dolphin state and current dolphin state, produce an event
+     fn produce_melee_event(prev_state: &DolphinGameState, state: &DolphinGameState) -> MeleeEvent {
+        tracing::info!(target: Log::DiscordRPC, "Major: {:?}", state.scene_major);
+        tracing::info!(target: Log::DiscordRPC, "Minor: {:?}", state.scene_minor);
         let vs_screen_1 = state.scene_major == SCENE_VS_ONLINE
             && prev_state.scene_minor != SCENE_VS_ONLINE_VERSUS
             && state.scene_minor == SCENE_VS_ONLINE_VERSUS;
@@ -162,8 +143,6 @@ impl DiscordActivityHandler {
             MeleeEvent::NoOp
         }
     }
-
-    /// Create a `DolphinGameState` by reading Dolphin's memory
     fn read_dolphin_game_state(m_p_ram: &usize) -> Result<DolphinGameState> {
         #[inline(always)]
         fn read<T: Copy>(offset: usize) -> Result<T> {
@@ -196,12 +175,8 @@ impl DiscordActivityHandler {
 
 impl Drop for DiscordActivityHandler {
     fn drop(&mut self) {
-        tracing::info!(target: Log::DiscordRPC, "Dropping Slippi DiscordActivityHandler");
-        if let Err(e) = self.tx.send(Message::Dropped) {
-            tracing::warn!(
-                target: Log::DiscordRPC,
-                "Failed to notify child thread that DiscordActivityHandler is dropping: {e}"
-            );
+        if self.tx.send(Message::Exit).is_err() {
+            eprintln!("Error sending exit message to dispatcher");
         }
     }
 }
