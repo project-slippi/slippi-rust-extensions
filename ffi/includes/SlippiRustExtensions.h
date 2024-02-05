@@ -4,6 +4,12 @@
 #include <ostream>
 #include <new>
 
+/// Indicates what type of direct code operation we're in.
+enum DirectCodeKind {
+  Direct = 1,
+  Teams = 2,
+};
+
 /// This enum is duplicated from `slippi_game_reporter::OnlinePlayMode` in order
 /// to appease cbindgen, which cannot see the type from the other module for
 /// inspection.
@@ -25,7 +31,7 @@ enum SlippiMatchmakingOnlinePlayMode {
 /// structure.
 struct SlippiRustEXIConfig {
   const char *iso_path;
-  const char *user_json_path;
+  const char *user_config_folder;
   const char *scm_slippi_semver_str;
   void (*osd_add_msg_fn)(const char*, uint32_t, uint32_t);
 };
@@ -255,5 +261,27 @@ RustChatMessages *slprs_user_get_default_messages(uintptr_t exi_device_instance_
 /// Takes back ownership of a `RustChatMessages` instance and frees the underlying data
 /// by converting it into the proper Rust types.
 void slprs_user_free_messages(RustChatMessages *ptr);
+
+/// Passes along a direct code to add or update.
+void slprs_user_direct_codes_add_or_update(uintptr_t exi_device_instance_ptr,
+                                           DirectCodeKind kind,
+                                           const char *code);
+
+/// Gets the length of the current direct codes stack for the given `kind`.
+uint32_t slprs_user_direct_codes_get_length(uintptr_t exi_device_instance_ptr, DirectCodeKind kind);
+
+/// Checks to see if we have a direct code at `index`.
+///
+/// This has the unfortunate aspect of going: Rust String -> CString -> C++ std::string, but
+/// this will go away over time. Just be aware it's doing more allocations than is perhaps
+/// ideal... but this area of code isn't performance sensitive anyway as it's not core
+/// gameplay.
+char *slprs_user_direct_codes_get_code_at_index(uintptr_t exi_device_instance_ptr,
+                                                DirectCodeKind kind,
+                                                uintptr_t index);
+
+/// As the allocator on the C++ could be different, we need to provide a `free` method
+/// that the C++ side will call when it's handled everything it needs to do.
+void slprs_user_direct_codes_free_code(char *code);
 
 } // extern "C"
