@@ -26,10 +26,10 @@ enum SortBy {
 /// The actual payload that's serialized back and forth to disk.
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
 pub struct DirectCode {
-    #[serde(rename = "connectCode")]
+    #[serde(rename = "connectCode", alias = "connect_code")]
     pub connect_code: String,
 
-    #[serde(rename = "lastPlayed", with = "last_played_parser")]
+    #[serde(rename = "lastPlayed", alias = "last_played", with = "last_played_parser")]
     pub last_played: OffsetDateTime,
     // This doesn't exist yet and is stubbed to match the C++ version,
     // which had some inkling of it - and could always be used in the
