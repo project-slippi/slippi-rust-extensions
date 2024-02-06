@@ -8,8 +8,8 @@
 //! unix timestamp handling code.
 
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
 use time::macros::format_description;
+use time::OffsetDateTime;
 
 /// Serializes a timestamp as a unix timestamp (`i64`).
 pub fn serialize<S>(datetime: &OffsetDateTime, serializer: S) -> Result<S::Ok, S::Error>
@@ -28,18 +28,19 @@ where
     let value = serde_json::Value::deserialize(deserializer)?;
 
     if let Some(timestamp) = value.as_i64() {
-        return OffsetDateTime::from_unix_timestamp(timestamp)
-            .map_err(serde::de::Error::custom);
+        return OffsetDateTime::from_unix_timestamp(timestamp).map_err(serde::de::Error::custom);
     }
 
     if let Some(datetime_str) = value.as_str() {
         let tsfmt = format_description!("[year][month][day]T[offset_hour][offset_minute][offset_second]");
 
-        return OffsetDateTime::parse(datetime_str, &tsfmt)
-            .map_err(serde::de::Error::custom);
+        return OffsetDateTime::parse(datetime_str, &tsfmt).map_err(serde::de::Error::custom);
     }
 
-    Err(serde::de::Error::custom(format!("Invalid last_played type in direct codes file: {:?}", value)))
+    Err(serde::de::Error::custom(format!(
+        "Invalid last_played type in direct codes file: {:?}",
+        value
+    )))
 }
 
 // Auto-generate serde parsers for the lastPlayed JSON field.
