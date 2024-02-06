@@ -1,4 +1,4 @@
-//! Direct codes are used on the connect screen as a form of history (codes 
+//! Direct codes are used on the connect screen as a form of history (codes
 //! that have been recently connected to).
 
 use std::borrow::Cow;
@@ -17,11 +17,10 @@ mod last_played_parser;
 #[derive(Debug)]
 enum SortBy {
     // This sort type is not used at the moment, but was stubbed
-    // out in the C++ version. It's kept around commented out for 
+    // out in the C++ version. It's kept around commented out for
     // marking potential future intentions.
     // Name,
-
-    LastPlayed
+    LastPlayed,
 }
 
 /// The actual payload that's serialized back and forth to disk.
@@ -32,7 +31,6 @@ pub struct DirectCode {
 
     #[serde(rename = "lastPlayed", with = "last_played_parser")]
     pub last_played: OffsetDateTime,
-
     // This doesn't exist yet and is stubbed to match the C++ version,
     // which had some inkling of it - and could always be used in the
     // future.
@@ -46,7 +44,7 @@ pub struct DirectCode {
 #[derive(Clone, Debug)]
 pub struct DirectCodes {
     path: Arc<PathBuf>,
-    codes: Arc<Mutex<Vec<DirectCode>>>
+    codes: Arc<Mutex<Vec<DirectCode>>>,
 }
 
 impl DirectCodes {
@@ -67,17 +65,17 @@ impl DirectCodes {
 
                 Err(error) => {
                     tracing::error!(?error, "Unable to parse direct codes file");
-                }
+                },
             },
 
             Err(error) => {
                 tracing::error!(?error, "Unable to read direct codes file");
-            }
+            },
         }
 
         Self {
             path: Arc::new(path),
-            codes: Arc::new(Mutex::new(codes))
+            codes: Arc::new(Mutex::new(codes)),
         }
     }
 
@@ -86,7 +84,7 @@ impl DirectCodes {
         match sort_by {
             SortBy::LastPlayed => {
                 codes.sort_by(|a, b| a.last_played.cmp(&b.last_played));
-            }
+            },
         }
     }
 
@@ -96,8 +94,7 @@ impl DirectCodes {
     /// me to think that this will be more clear in the long term how delegation is
     /// happening.
     pub fn len(&self) -> usize {
-        let codes = self.codes.lock()
-            .expect("Unable to lock codes for len check");
+        let codes = self.codes.lock().expect("Unable to lock codes for len check");
 
         codes.len()
     }
@@ -107,8 +104,7 @@ impl DirectCodes {
     /// This utilizes `Cow` (Copy-On-Write) to avoid extra allocations where
     /// we don't perhaps need them.
     pub fn get(&self, index: usize) -> Cow<'static, str> {
-        let mut codes = self.codes.lock()
-            .expect("Unable to lock codes for autocomplete");
+        let mut codes = self.codes.lock().expect("Unable to lock codes for autocomplete");
 
         Self::sort(&mut codes, SortBy::LastPlayed);
 
@@ -120,7 +116,7 @@ impl DirectCodes {
 
         Cow::Borrowed(match index >= codes.len() {
             true => "1",
-            false => ""
+            false => "",
         })
     }
 
@@ -130,11 +126,10 @@ impl DirectCodes {
     /// order it appropriately.
     pub fn add_or_update_code(&self, code: String) {
         tracing::warn!(target: Log::SlippiOnline, ?code, "Attempting to add or update direct code");
-    
+
         let last_played = OffsetDateTime::now_utc();
 
-        let mut codes = self.codes.lock()
-            .expect("Unable to lock codes for autocomplete");
+        let mut codes = self.codes.lock().expect("Unable to lock codes for autocomplete");
 
         let mut found = false;
         for mut entry in codes.iter_mut() {
@@ -147,11 +142,11 @@ impl DirectCodes {
         if !found {
             codes.push(DirectCode {
                 connect_code: code,
-                last_played
+                last_played,
             });
         }
 
-        // Consider moving this to a background thread if the performance of 
+        // Consider moving this to a background thread if the performance of
         // `write_file` ever becomes an issue. In practice, it's never been one.
         Self::write_file(self.path.as_path(), &codes);
     }
@@ -191,8 +186,13 @@ impl DirectCodes {
             },
 
             Err(error) => {
-                tracing::error!(target: Log::SlippiOnline, ?error, ?path, "Unable to open direct codes file for write");
-            }
+                tracing::error!(
+                    target: Log::SlippiOnline,
+                    ?error,
+                    ?path,
+                    "Unable to open direct codes file for write"
+                );
+            },
         }
     }
 }
