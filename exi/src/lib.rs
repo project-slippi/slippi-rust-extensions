@@ -52,7 +52,7 @@ impl SlippiEXIDevice {
 
         let user_manager = UserManager::new(
             http_client.clone(),
-            config.paths.user_json.clone().into(),
+            config.paths.user_config_folder.clone().into(),
             config.scm.slippi_semver.clone(),
         );
 

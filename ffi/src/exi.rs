@@ -16,7 +16,7 @@ use crate::c_str_to_string;
 pub struct SlippiRustEXIConfig {
     // Paths
     pub iso_path: *const c_char,
-    pub user_json_path: *const c_char,
+    pub user_config_folder: *const c_char,
 
     // Git version number
     pub scm_slippi_semver_str: *const c_char,
@@ -52,7 +52,7 @@ pub extern "C" fn slprs_exi_device_create(config: SlippiRustEXIConfig) -> usize 
     let exi_device = Box::new(SlippiEXIDevice::new(Config {
         paths: FilePathsConfig {
             iso: c_str_to_string(config.iso_path, fn_name, "iso_path"),
-            user_json: c_str_to_string(config.user_json_path, fn_name, "user_json"),
+            user_config_folder: c_str_to_string(config.user_config_folder, fn_name, "user_config_folder"),
         },
 
         scm: SCMConfig {
