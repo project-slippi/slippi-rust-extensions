@@ -239,8 +239,8 @@ pub extern "C" fn slprs_user_free_messages(ptr: *mut RustChatMessages) {
 /// Indicates what type of direct code operation we're in.
 #[repr(C)]
 pub enum DirectCodeKind {
-    Direct = 1,
-    Teams = 2,
+    DirectCodes = 1,
+    TeamsCodes = 2,
 }
 
 /// Passes along a direct code to add or update.
@@ -253,11 +253,11 @@ pub extern "C" fn slprs_user_direct_codes_add_or_update(
     let code = c_str_to_string(code, "slprs_user_add_or_update_direct_code", "code");
 
     with::<SlippiEXIDevice, _>(exi_device_instance_ptr, move |device| match kind {
-        DirectCodeKind::Direct => {
+        DirectCodeKind::DirectCodes => {
             device.user_manager.direct_codes.add_or_update_code(code);
         },
 
-        DirectCodeKind::Teams => {
+        DirectCodeKind::TeamsCodes => {
             device.user_manager.teams_direct_codes.add_or_update_code(code);
         },
     });
@@ -267,9 +267,8 @@ pub extern "C" fn slprs_user_direct_codes_add_or_update(
 #[no_mangle]
 pub extern "C" fn slprs_user_direct_codes_get_length(exi_device_instance_ptr: usize, kind: DirectCodeKind) -> u32 {
     with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, move |device| match kind {
-        DirectCodeKind::Direct => device.user_manager.direct_codes.len() as u32,
-
-        DirectCodeKind::Teams => device.user_manager.teams_direct_codes.len() as u32,
+        DirectCodeKind::DirectCodes => device.user_manager.direct_codes.len() as u32,
+        DirectCodeKind::TeamsCodes => device.user_manager.teams_direct_codes.len() as u32,
     })
 }
 
@@ -286,9 +285,8 @@ pub extern "C" fn slprs_user_direct_codes_get_code_at_index(
     index: usize,
 ) -> *mut c_char {
     let code = with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, move |device| match kind {
-        DirectCodeKind::Direct => device.user_manager.direct_codes.get(index),
-
-        DirectCodeKind::Teams => device.user_manager.teams_direct_codes.get(index),
+        DirectCodeKind::DirectCodes => device.user_manager.direct_codes.get(index),
+        DirectCodeKind::TeamsCodes => device.user_manager.teams_direct_codes.get(index),
     });
 
     CString::new(code.as_bytes())
