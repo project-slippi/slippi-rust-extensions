@@ -1,22 +1,21 @@
 //! This module implements the background queue for the Game Reporter.
 
 use std::collections::VecDeque;
+use std::io::Write;
 use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use serde_json::{json, Value};
-use ureq::Agent;
 
 use dolphin_integrations::{Color, Dolphin, Duration as OSDDuration, Log};
+use slippi_gg_api::APIClient;
 
 use crate::types::{GameReport, GameReportRequestPayload, OnlinePlayMode};
 use crate::{CompletionEvent, ProcessingEvent};
-
-use flate2::write::GzEncoder;
-use flate2::Compression;
-use std::io::Write;
 
 const GRAPHQL_URL: &str = "https://gql-gateway-dot-slippi.uc.r.appspot.com/graphql";
 
@@ -40,16 +39,16 @@ struct ReportResponse {
 /// of data around various threads.
 #[derive(Clone, Debug)]
 pub struct GameReporterQueue {
-    pub http_client: ureq::Agent,
+    pub api_client: APIClient,
     pub iso_hash: Arc<Mutex<String>>,
     inner: Arc<Mutex<VecDeque<GameReport>>>,
 }
 
 impl GameReporterQueue {
     /// Initializes and returns a new game reporter.
-    pub(crate) fn new(http_client: Agent) -> Self {
+    pub(crate) fn new(api_client: APIClient) -> Self {
         Self {
-            http_client,
+            api_client,
             iso_hash: Arc::new(Mutex::new(String::new())),
             inner: Arc::new(Mutex::new(VecDeque::new())),
         }
@@ -90,7 +89,7 @@ impl GameReporterQueue {
             }
         }));
 
-        let res = execute_graphql_query(&self.http_client, mutation, variables, Some("abandonOnlineGame"));
+        let res = execute_graphql_query(&self.api_client, mutation, variables, Some("abandonOnlineGame"));
 
         match res {
             Ok(value) if value == "true" => {
@@ -102,7 +101,7 @@ impl GameReporterQueue {
     }
 }
 
-pub(crate) fn run_completion(http_client: ureq::Agent, receiver: Receiver<CompletionEvent>) {
+pub(crate) fn run_completion(api_client: APIClient, receiver: Receiver<CompletionEvent>) {
     loop {
         // Watch for notification to do work
         match receiver.recv() {
@@ -112,7 +111,7 @@ pub(crate) fn run_completion(http_client: ureq::Agent, receiver: Receiver<Comple
                 match_id,
                 end_mode,
             }) => {
-                report_completion(&http_client, uid, match_id, play_key, end_mode);
+                report_completion(&api_client, uid, match_id, play_key, end_mode);
             },
 
             Ok(CompletionEvent::Shutdown) => {
@@ -140,7 +139,7 @@ pub(crate) fn run_completion(http_client: ureq::Agent, receiver: Receiver<Comple
 ///
 /// This doesn't necessarily need to be here, but it's easier to grok the codebase
 /// if we keep all reporting network calls in one module.
-pub fn report_completion(http_client: &ureq::Agent, uid: String, match_id: String, play_key: String, end_mode: u8) {
+pub fn report_completion(api_client: &APIClient, uid: String, match_id: String, play_key: String, end_mode: u8) {
     let mutation = r#"
         mutation ($report: OnlineGameCompleteInput!) {
             completeOnlineGame (report: $report)
@@ -156,7 +155,7 @@ pub fn report_completion(http_client: &ureq::Agent, uid: String, match_id: Strin
         }
     }));
 
-    let res = execute_graphql_query(http_client, mutation, variables, Some("completeOnlineGame"));
+    let res = execute_graphql_query(api_client, mutation, variables, Some("completeOnlineGame"));
 
     match res {
         Ok(value) if value == "true" => {
@@ -218,7 +217,7 @@ fn process_reports(queue: &GameReporterQueue, event: ProcessingEvent) {
         // (e.g, max attempts). We pass the locked queue over to work with the borrow checker
         // here, since otherwise we can't pop without some ugly block work to coerce letting
         // a mutable borrow drop.
-        match try_send_next_report(&mut *report_queue, event, &queue.http_client, &iso_hash) {
+        match try_send_next_report(&mut *report_queue, event, &queue.api_client, &iso_hash) {
             Ok(upload_url) => {
                 // Pop the front of the queue. If we have a URL, chuck it all over
                 // to the replay uploader.
@@ -227,7 +226,7 @@ fn process_reports(queue: &GameReporterQueue, event: ProcessingEvent) {
                 tracing::info!(target: Log::SlippiOnline, "Successfully sent report, popping from queue");
 
                 if let (Some(report), Some(upload_url)) = (report, upload_url) {
-                    try_upload_replay_data(report.replay_data, upload_url, &queue.http_client);
+                    try_upload_replay_data(report.replay_data, upload_url, &queue.api_client);
                 }
 
                 thread::sleep(Duration::ZERO)
@@ -266,7 +265,7 @@ fn process_reports(queue: &GameReporterQueue, event: ProcessingEvent) {
 /// The true inner error, minus any metadata.
 #[derive(Debug)]
 enum ReportSendErrorKind {
-    Net(ureq::Error),
+    Net(slippi_gg_api::Error),
     JSON(serde_json::Error),
     GraphQL(String),
     NotSuccessful(String),
@@ -287,7 +286,7 @@ struct ReportSendError {
 fn try_send_next_report(
     queue: &mut VecDeque<GameReport>,
     event: ProcessingEvent,
-    http_client: &ureq::Agent,
+    api_client: &APIClient,
     iso_hash: &str,
 ) -> Result<Option<String>, ReportSendError> {
     let report = (*queue).front_mut().expect("Reporter queue is empty yet it shouldn't be");
@@ -324,7 +323,7 @@ fn try_send_next_report(
 
     // Call execute_graphql_query and get the response body as a String.
     let response_body =
-        execute_graphql_query(http_client, mutation, variables, Some("reportOnlineGame")).map_err(|e| ReportSendError {
+        execute_graphql_query(api_client, mutation, variables, Some("reportOnlineGame")).map_err(|e| ReportSendError {
             is_last_attempt,
             sleep_ms: error_sleep_ms,
             kind: e,
@@ -350,7 +349,7 @@ fn try_send_next_report(
 
 /// Prepares and executes a GraphQL query.
 fn execute_graphql_query(
-    http_client: &ureq::Agent,
+    api_client: &APIClient,
     query: &str,
     variables: Option<Value>,
     field: Option<&str>,
@@ -367,7 +366,7 @@ fn execute_graphql_query(
     };
 
     // Make the GraphQL request
-    let response = http_client
+    let response = api_client
         .post(GRAPHQL_URL)
         .send_json(&request_body)
         .map_err(ReportSendErrorKind::Net)?;
@@ -427,7 +426,7 @@ fn add_slp_header_and_footer(data: Arc<Mutex<Vec<u8>>>) -> Vec<u8> {
 }
 
 /// Attempts to compress and upload replay data to the url at `upload_url`.
-fn try_upload_replay_data(data: Arc<Mutex<Vec<u8>>>, upload_url: String, http_client: &ureq::Agent) {
+fn try_upload_replay_data(data: Arc<Mutex<Vec<u8>>>, upload_url: String, api_client: &APIClient) {
     let contents = add_slp_header_and_footer(data);
 
     let mut gzipped_data = vec![0u8; contents.len()]; // Resize to some initial size
@@ -443,7 +442,7 @@ fn try_upload_replay_data(data: Arc<Mutex<Vec<u8>>>, upload_url: String, http_cl
 
     gzipped_data.resize(res_size, 0);
 
-    let response = http_client
+    let response = api_client
         .put(upload_url.as_str())
         .set("Content-Type", "application/octet-stream")
         .set("Content-Encoding", "gzip")

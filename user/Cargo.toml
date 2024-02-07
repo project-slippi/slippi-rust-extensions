@@ -20,5 +20,5 @@ dolphin-integrations = { path = "../dolphin" }
 open = "5"
 serde = { workspace = true }
 serde_json = { workspace = true }
+slippi-gg-api = { path = "../slippi-gg-api" }
 tracing = { workspace = true }
-ureq = { workspace = true }

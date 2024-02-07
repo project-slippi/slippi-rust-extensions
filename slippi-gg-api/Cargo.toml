@@ -1,0 +1,21 @@
+[package]
+name = "slippi-gg-api"
+description = "slippi.gg API client for internal calls."
+version = "0.1.0"
+authors = [
+    "Slippi Team",
+    "Ryan McGrath <ryan@rymc.io>"
+]
+repository = ""
+edition = "2021"
+publish = false
+
+[dependencies]
+ureq = { workspace = true }
+tracing = { workspace = true }
+
+[features]
+default = ["ishiiruka"]
+ishiiruka = []
+mainline = []
+playback = []

@@ -7,9 +7,8 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
 
-use ureq::Agent;
-
 use dolphin_integrations::Log;
+use slippi_gg_api::APIClient;
 use slippi_user::UserManager;
 
 mod iso_md5_hasher;
@@ -68,8 +67,8 @@ impl GameReporter {
     ///
     /// Currently, failure to spawn any thread should result in a crash - i.e, if we can't
     /// spawn an OS thread, then there are probably far bigger issues at work here.
-    pub fn new(http_client: Agent, user_manager: UserManager, iso_path: String) -> Self {
-        let queue = GameReporterQueue::new(http_client.clone());
+    pub fn new(api_client: APIClient, user_manager: UserManager, iso_path: String) -> Self {
+        let queue = GameReporterQueue::new(api_client.clone());
 
         // This is a thread-safe "one time" setter that the MD5 hasher thread
         // will set when it's done computing.
@@ -97,7 +96,7 @@ impl GameReporter {
         let completion_thread = thread::Builder::new()
             .name("GameReporterCompletionProcessingThread".into())
             .spawn(move || {
-                queue::run_completion(http_client, completion_receiver);
+                queue::run_completion(api_client, completion_receiver);
             })
             .expect("Failed to spawn GameReporterCompletionProcessingThread.");
 

@@ -11,13 +11,20 @@ publish = false
 
 [features]
 default = []
-ishiiruka = []
-mainline = []
+ishiiruka = [
+    "slippi-gg-api/ishiiruka"
+]
+mainline = [
+    "slippi-gg-api/mainline"
+]
+playback = [
+    "slippi-gg-api/playback"
+]
 
 [dependencies]
 dolphin-integrations = { path = "../dolphin" }
 slippi-game-reporter = { path = "../game-reporter" }
+slippi-gg-api = { path = "../slippi-gg-api" }
 slippi-jukebox = { path = "../jukebox" }
 slippi-user = { path = "../user" }
 tracing = { workspace = true }
-ureq = { workspace = true }
