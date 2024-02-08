@@ -90,6 +90,25 @@ pub extern "C" fn slprs_exi_device_destroy(exi_device_instance_ptr: usize) {
     }
 }
 
+/// This method is for the C++ side to notify that the Memory system is initialized and ready
+/// for use; the EXI device can then initialize any systems it needs that rely on the offset.
+#[no_mangle]
+pub extern "C" fn slprs_exi_device_on_memory_initialized(exi_device_instance_ptr: usize, m_p_ram: *const u8) {
+    let offset = m_p_ram as usize;
+
+    tracing::warn!(target: Log::SlippiOnline, ptr = exi_device_instance_ptr, m_pRAM = offset);
+
+    // Coerce the instance back from the pointer. This is theoretically safe since we control
+    // the C++ side and can guarantee that the `exi_device_instance_ptr` pointer is only owned
+    // by the C++ EXI device, and is created/destroyed with the corresponding lifetimes.
+    let mut device = unsafe { Box::from_raw(exi_device_instance_ptr as *mut SlippiEXIDevice) };
+
+    device.on_memory_initialized(offset);
+
+    // Fall back into a raw pointer so Rust doesn't obliterate the object
+    let _leak = Box::into_raw(device);
+}
+
 /// This method should be called from the EXI device subclass shim that's registered on
 /// the Dolphin side, corresponding to:
 ///
@@ -238,6 +257,21 @@ pub extern "C" fn slprs_exi_device_configure_jukebox(
         false => JukeboxConfiguration::Stop,
     };
     device.configure_jukebox(jukebox_config);
+
+    // Fall back into a raw pointer so Rust doesn't obliterate the object.
+    let _leak = Box::into_raw(device);
+}
+
+#[no_mangle]
+pub extern "C" fn slprs_start_discord_rich_presence(exi_device_instance_ptr: usize, m_p_ram: *const u8) {
+    // Coerce the instance from the pointer. This is theoretically safe since we control
+    // the C++ side and can guarantee that the `exi_device_instance_ptr` is only owned
+    // by the C++ EXI device, and is created/destroyed with the corresponding lifetimes.
+    let mut device = unsafe { Box::from_raw(exi_device_instance_ptr as *mut SlippiEXIDevice) };
+
+    let m_p_ram = m_p_ram as usize;
+    let config = slippi_exi_device::DiscordActivityHandlerConfiguration::Start { m_p_ram };
+    device.configure_discord_handler(config);
 
     // Fall back into a raw pointer so Rust doesn't obliterate the object.
     let _leak = Box::into_raw(device);
