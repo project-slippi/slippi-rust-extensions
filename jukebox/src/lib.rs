@@ -4,7 +4,7 @@ use std::fs::File;
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use dolphin_integrations::{Color, Dolphin, Duration as OSDDuration, Log};
-use hps_decode::Hps;
+use hps_decode::{decoded_hps::DecodedHps, Hps};
 use rodio::{OutputStream, Sink};
 
 use crate::Message::*;
@@ -25,6 +25,17 @@ pub(crate) type Result<T> = std::result::Result<T, JukeboxError>;
 /// does. This reduces the overall music volume output to 80%. Not totally sure
 /// if that's the correct amount, but it sounds about right.
 const VOLUME_REDUCTION_MULTIPLIER: f32 = 0.8;
+
+// Change this modifier to slow down or speed up the music for fun. For
+// example, 0.8 sounds like vaporwave, and 1.3 sounds like nightcore
+//
+// Note: Changing this alters what we perceive as "pitch", so be careful for
+// your own ears' sake.
+//
+// I particularly like the trophy menu theme at 0.8 :)
+const SONG_SPEED_MODIFIER: f32 = 1.0;
+
+struct WrappedDecodedHps(DecodedHps);
 
 #[derive(Debug)]
 pub enum Message {
@@ -146,7 +157,7 @@ impl Jukebox {
                     };
 
                     // Play the song
-                    sink.append(audio);
+                    sink.append(WrappedDecodedHps(audio));
                     sink.play();
                 },
                 SetVolume(control, volume) => {
@@ -201,5 +212,28 @@ impl Drop for Jukebox {
                 "Failed to notify child thread that Jukebox is dropping: {e}"
             );
         }
+    }
+}
+
+impl Iterator for WrappedDecodedHps {
+    type Item = i16;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
+    }
+}
+
+impl rodio::Source for WrappedDecodedHps {
+    fn current_frame_len(&self) -> Option<usize> {
+        self.0.current_frame_len()
+    }
+    fn channels(&self) -> u16 {
+        self.0.channels()
+    }
+    fn sample_rate(&self) -> u32 {
+        (self.0.sample_rate() as f32 * SONG_SPEED_MODIFIER) as u32
+    }
+    fn total_duration(&self) -> Option<std::time::Duration> {
+        self.0.total_duration()
     }
 }
