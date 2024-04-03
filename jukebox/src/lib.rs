@@ -129,29 +129,33 @@ impl Jukebox {
                     // Try finding custom song
                     let mut custom_song_path = None;
                     if let Some(iso_dir) = Path::new(&iso_path).parent() {
-                        let stage_dir = iso_dir.join("music").join(hps_to_stage(real_hps_offset));
-                        if let Ok(entries) = read_dir(&stage_dir) {
-                            // Get all files in folder
-                            let files: Vec<_> = entries
-                                .filter_map(|entry| {
-                                    if let Ok(entry) = entry {
-                                        let path = entry.path();
-                                        if path.is_file() {
-                                            if let Some(extension) = path.extension().and_then(|extension| extension.to_str()) {
-                                                if ["mp3", "wav", "ogg", "flac"].contains(&extension.to_lowercase().as_str()) {
-                                                    return Some(path);
+                        if let Some(stage) = hps_to_stage(real_hps_offset) {
+                            let stage_dir = iso_dir.join("music").join(stage);
+                            if let Ok(entries) = read_dir(&stage_dir) {
+                                // Get all files in folder
+                                let files: Vec<_> = entries
+                                    .filter_map(|entry| {
+                                        if let Ok(entry) = entry {
+                                            let path = entry.path();
+                                            if path.is_file() {
+                                                if let Some(extension) = path.extension().and_then(|extension| extension.to_str())
+                                                {
+                                                    if ["mp3", "wav", "ogg", "flac"].contains(&extension.to_lowercase().as_str())
+                                                    {
+                                                        return Some(path);
+                                                    }
                                                 }
                                             }
                                         }
-                                    }
-                                    None
-                                })
-                                .collect();
+                                        None
+                                    })
+                                    .collect();
 
-                            // Choose a random file from the stage folder if available
-                            if !files.is_empty() {
-                                if let Some(random_file) = files.choose(&mut rand::thread_rng()) {
-                                    custom_song_path = Some(random_file.clone())
+                                // Choose a random file from the stage folder if available
+                                if !files.is_empty() {
+                                    if let Some(random_file) = files.choose(&mut rand::thread_rng()) {
+                                        custom_song_path = Some(random_file.clone())
+                                    }
                                 }
                             }
                         }

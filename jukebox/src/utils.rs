@@ -13,7 +13,7 @@ pub(crate) fn copy_bytes_from_file(file: &mut File, offset: u64, size: usize) ->
 
 /// Converts an HPS offset to its equivalent stage name
 /// Essentially, gets the stage belonging to a song
-pub(crate) fn hps_to_stage(offset: u64) -> String {
+pub(crate) fn hps_to_stage(offset: u64) -> Option<String> {
     let stage = match offset {
         // Legal stages
         71324300 | 183962648 => "final_destination",
@@ -52,5 +52,9 @@ pub(crate) fn hps_to_stage(offset: u64) -> String {
         _ => "",
     };
 
-    stage.into()
+    if !stage.is_empty() {
+        Some(stage.to_owned())
+    } else {
+        None
+    }
 }
