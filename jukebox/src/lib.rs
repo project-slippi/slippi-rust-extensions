@@ -8,7 +8,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use dolphin_integrations::{Color, Dolphin, Duration as OSDDuration, Log};
 use hps_decode::Hps;
 use rand::seq::SliceRandom;
-use rodio::{OutputStream, Sink};
+use rodio::{OutputStream, Sink, Source};
 
 use crate::utils::hps_to_stage;
 use crate::Message::*;
@@ -126,10 +126,10 @@ impl Jukebox {
                         },
                     };
 
-                    let custom_song = {
-                        let iso_dir = Path::new(&iso_path).parent().unwrap();
+                    // Try finding custom song
+                    let mut custom_song_path = None;
+                    if let Some(iso_dir) = Path::new(&iso_path).parent() {
                         let stage_dir = iso_dir.join("music").join(hps_to_stage(real_hps_offset));
-
                         if let Ok(entries) = read_dir(&stage_dir) {
                             // Get all files in folder
                             let files: Vec<_> = entries
@@ -146,21 +146,26 @@ impl Jukebox {
 
                             // Choose a random file from the stage folder if available
                             if !files.is_empty() {
-                                let random_file = files.choose(&mut rand::thread_rng()).unwrap();
-                                Some(random_file.clone())
-                            } else {
-                                None
+                                if let Some(random_file) = files.choose(&mut rand::thread_rng()) {
+                                    custom_song_path = Some(random_file.clone())
+                                }
                             }
-                        } else {
-                            None
                         }
-                    };
+                    }
 
                     // Append stage audio to sink
-                    if let Some(custom_song) = custom_song {
-                        let custom_song = BufReader::new(File::open(custom_song).unwrap());
-                        let audio = rodio::Decoder::new(custom_song).unwrap();
-                        sink.append(audio);
+                    if let Some(custom_song_path) = custom_song_path {
+                        match File::open(custom_song_path) {
+                            Ok(custom_song_file) => {
+                                if let Ok(custom_song) = rodio::Decoder::new(BufReader::new(custom_song_file)) {
+                                    sink.append(custom_song.repeat_infinite());
+                                }
+                            },
+                            Err(e) => {
+                                tracing::error!(target: Log::Jukebox, error = ?e, "Failed to open custom song. Cannot play song.");
+                                continue;
+                            },
+                        }
                     } else {
                         // Parse the bytes as an Hps
                         let hps: Hps = match copy_bytes_from_file(&mut iso, real_hps_offset, hps_length)?.try_into() {

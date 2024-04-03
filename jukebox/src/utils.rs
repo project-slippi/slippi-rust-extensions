@@ -12,6 +12,7 @@ pub(crate) fn copy_bytes_from_file(file: &mut File, offset: u64, size: usize) ->
 }
 
 /// Converts an HPS offset to its equivalent stage name
+/// Essentially, gets the stage belonging to a song
 pub(crate) fn hps_to_stage(offset: u64) -> String {
     let stage = match offset {
         // Legal stages
@@ -20,7 +21,7 @@ pub(crate) fn hps_to_stage(offset: u64) -> String {
         260526192 => "yoshis_story",
         86968172 => "fountain_of_dreams",
         135559532 => "dreamland",
-        156902380 => "pokemon_stadium",
+        156902380 | 160483852 => "pokemon_stadium",
         // Misc
         116194572 | 114173548 | 112087660 => "menu",
         227529496 => "target_test",
@@ -32,8 +33,8 @@ pub(crate) fn hps_to_stage(offset: u64) -> String {
         40067628 => "fourside",
         12767116 | 119550124 => "big_blue",
         163012812 => "poke_floats",
-        79192940 => "kingdom",
-        83914380 | 24668300 => "kingdom_2",
+        79192940 | 24668300 => "kingdom",
+        83914380 => "kingdom_2",
         264873488 => "brinstar",
         144477996 | 140261388 => "onett",
         124345132 => "mute_city",
