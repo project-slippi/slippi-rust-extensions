@@ -1,12 +1,16 @@
 use std::convert::TryInto;
 use std::fmt::Debug;
-use std::fs::File;
+use std::fs::{read_dir, File};
+use std::io::BufReader;
+use std::path::Path;
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use dolphin_integrations::{Color, Dolphin, Duration as OSDDuration, Log};
 use hps_decode::Hps;
+use rand::seq::SliceRandom;
 use rodio::{OutputStream, Sink};
 
+use crate::utils::hps_to_stage;
 use crate::Message::*;
 
 mod errors;
@@ -122,31 +126,66 @@ impl Jukebox {
                         },
                     };
 
-                    // Parse the bytes as an Hps
-                    let hps: Hps = match copy_bytes_from_file(&mut iso, real_hps_offset, hps_length)?.try_into() {
-                        Ok(hps) => hps,
-                        Err(e) => {
-                            tracing::error!(target: Log::Jukebox, error = ?e, "Failed to parse bytes into an Hps. Cannot play song.");
-                            continue;
-                        },
+                    let custom_song = {
+                        let iso_dir = Path::new(&iso_path).parent().unwrap();
+                        let stage_dir = iso_dir.join("music").join(hps_to_stage(real_hps_offset));
+
+                        if let Ok(entries) = read_dir(&stage_dir) {
+                            // Get all files in folder
+                            let files: Vec<_> = entries
+                                .filter_map(|entry| {
+                                    let entry = entry.ok()?;
+                                    let path = entry.path();
+                                    if path.is_file() {
+                                        Some(path)
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
+
+                            // Choose a random file from the stage folder if available
+                            if !files.is_empty() {
+                                let random_file = files.choose(&mut rand::thread_rng()).unwrap();
+                                Some(random_file.clone())
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
                     };
 
-                    // Decode the Hps into audio
-                    let audio = match hps.decode() {
-                        Ok(audio) => audio,
-                        Err(e) => {
-                            tracing::error!(target: Log::Jukebox, error = ?e, "Failed to decode hps into audio. Cannot play song.");
-                            Dolphin::add_osd_message(
-                                Color::Red,
-                                OSDDuration::Normal,
-                                "Invalid music data found in ISO. This music will not play.",
-                            );
-                            continue;
-                        },
-                    };
+                    // Append stage audio to sink
+                    if let Some(custom_song) = custom_song {
+                        let custom_song = BufReader::new(File::open(custom_song).unwrap());
+                        let audio = rodio::Decoder::new(custom_song).unwrap();
+                        sink.append(audio);
+                    } else {
+                        // Parse the bytes as an Hps
+                        let hps: Hps = match copy_bytes_from_file(&mut iso, real_hps_offset, hps_length)?.try_into() {
+                            Ok(hps) => hps,
+                            Err(e) => {
+                                tracing::error!(target: Log::Jukebox, error = ?e, "Failed to parse bytes into an Hps. Cannot play song.");
+                                continue;
+                            },
+                        };
+                        // Decode the Hps into audio
+                        let audio = match hps.decode() {
+                            Ok(audio) => audio,
+                            Err(e) => {
+                                tracing::error!(target: Log::Jukebox, error = ?e, "Failed to decode hps into audio. Cannot play song.");
+                                Dolphin::add_osd_message(
+                                    Color::Red,
+                                    OSDDuration::Normal,
+                                    "Invalid music data found in ISO. This music will not play.",
+                                );
+                                continue;
+                            },
+                        };
+                        sink.append(audio);
+                    }
 
-                    // Play the song
-                    sink.append(audio);
                     sink.play();
                 },
                 SetVolume(control, volume) => {
