@@ -134,13 +134,17 @@ impl Jukebox {
                             // Get all files in folder
                             let files: Vec<_> = entries
                                 .filter_map(|entry| {
-                                    let entry = entry.ok()?;
-                                    let path = entry.path();
-                                    if path.is_file() {
-                                        Some(path)
-                                    } else {
-                                        None
+                                    if let Ok(entry) = entry {
+                                        let path = entry.path();
+                                        if path.is_file() {
+                                            if let Some(extension) = path.extension().and_then(|extension| extension.to_str()) {
+                                                if ["mp3", "wav", "ogg", "flac"].contains(&extension.to_lowercase().as_str()) {
+                                                    return Some(path);
+                                                }
+                                            }
+                                        }
                                     }
+                                    None
                                 })
                                 .collect();
 
