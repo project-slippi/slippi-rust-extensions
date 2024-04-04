@@ -53,7 +53,12 @@ pub struct Jukebox {
 impl Jukebox {
     /// Returns an instance of Slippi Jukebox. Playback can be controlled by
     /// calling the instance's public methods.
-    pub fn new(iso_path: String, initial_dolphin_system_volume: u8, initial_dolphin_music_volume: u8) -> Result<Self> {
+    pub fn new(
+        iso_path: String,
+        jukebox_path: String,
+        initial_dolphin_system_volume: u8,
+        initial_dolphin_music_volume: u8,
+    ) -> Result<Self> {
         tracing::info!(target: Log::Jukebox, "Initializing Slippi Jukebox");
 
         // Make sure the provided ISO is supported
@@ -74,7 +79,13 @@ impl Jukebox {
         std::thread::Builder::new()
             .name("SlippiJukebox".to_string())
             .spawn(move || {
-                if let Err(e) = Self::start(rx, iso_path, initial_dolphin_system_volume, initial_dolphin_music_volume) {
+                if let Err(e) = Self::start(
+                    rx,
+                    iso_path,
+                    jukebox_path,
+                    initial_dolphin_system_volume,
+                    initial_dolphin_music_volume,
+                ) {
                     tracing::error!(
                         target: Log::Jukebox,
                         error = ?e,
@@ -93,6 +104,7 @@ impl Jukebox {
     fn start(
         rx: Receiver<Message>,
         iso_path: String,
+        jukebox_path: String,
         initial_dolphin_system_volume: u8,
         initial_dolphin_music_volume: u8,
     ) -> Result<()> {
@@ -128,34 +140,30 @@ impl Jukebox {
 
                     // Try finding custom song
                     let mut custom_song_path = None;
-                    if let Some(iso_dir) = Path::new(&iso_path).parent() {
-                        if let Some(stage) = hps_to_stage(real_hps_offset) {
-                            let stage_dir = iso_dir.join("music").join(stage);
-                            if let Ok(entries) = read_dir(&stage_dir) {
-                                // Get all files in folder
-                                let files: Vec<_> = entries
-                                    .filter_map(|entry| {
-                                        if let Ok(entry) = entry {
-                                            let path = entry.path();
-                                            if path.is_file() {
-                                                if let Some(extension) = path.extension().and_then(|extension| extension.to_str())
-                                                {
-                                                    if ["mp3", "wav", "ogg", "flac"].contains(&extension.to_lowercase().as_str())
-                                                    {
-                                                        return Some(path);
-                                                    }
+                    if let Some(stage) = hps_to_stage(real_hps_offset) {
+                        let stage_dir = Path::new(&jukebox_path).join(stage);
+                        if let Ok(entries) = read_dir(&stage_dir) {
+                            // Get all files in folder
+                            let files: Vec<_> = entries
+                                .filter_map(|entry| {
+                                    if let Ok(entry) = entry {
+                                        let path = entry.path();
+                                        if path.is_file() {
+                                            if let Some(extension) = path.extension().and_then(|extension| extension.to_str()) {
+                                                if ["mp3", "wav", "ogg", "flac"].contains(&extension.to_lowercase().as_str()) {
+                                                    return Some(path);
                                                 }
                                             }
                                         }
-                                        None
-                                    })
-                                    .collect();
-
-                                // Choose a random file from the stage folder if available
-                                if !files.is_empty() {
-                                    if let Some(random_file) = files.choose(&mut rand::thread_rng()) {
-                                        custom_song_path = Some(random_file.clone())
                                     }
+                                    None
+                                })
+                                .collect();
+
+                            // Choose a random file from the stage folder if available
+                            if !files.is_empty() {
+                                if let Some(random_file) = files.choose(&mut rand::thread_rng()) {
+                                    custom_song_path = Some(random_file.clone())
                                 }
                             }
                         }
