@@ -7,7 +7,6 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 
 use dolphin_integrations::{Color, Dolphin, Duration as OSDDuration, Log};
 use hps_decode::Hps;
-use rand::seq::SliceRandom;
 use rodio::{OutputStream, Sink, Source};
 
 use crate::utils::hps_to_stage;
@@ -162,7 +161,7 @@ impl Jukebox {
 
                             // Choose a random file from the stage folder if available
                             if !files.is_empty() {
-                                if let Some(random_file) = files.choose(&mut rand::thread_rng()) {
+                                if let Some(random_file) = fastrand::choice(files.iter()) {
                                     custom_song_path = Some(random_file.clone())
                                 }
                             }

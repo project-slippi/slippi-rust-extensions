@@ -17,8 +17,8 @@ mainline = []
 
 [dependencies]
 dolphin-integrations = { path = "../dolphin" }
+fastrand = "2.0.2"
 hps_decode = { version = "0.2.1", features = ["rodio-source"] }
-rand = "0.8.5"
-rodio = { version = "0.17.1" }
+rodio = { version = "0.17.1", default-features = false, features = ["flac", "mp3", "vorbis", "wav"] }
 thiserror = "1.0.44"
 tracing = { workspace = true }
