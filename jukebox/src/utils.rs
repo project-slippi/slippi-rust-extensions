@@ -69,8 +69,7 @@ pub(crate) fn hps_to_stage(hps: &str) -> Option<String> {
 }
 
 pub struct TrackList {
-    track_map: HashMap<u64, (usize, String)>,
-    jukebox_path: PathBuf,
+    track_map: HashMap<u64, PathBuf>,
 }
 
 impl TrackList {
@@ -111,59 +110,54 @@ impl TrackList {
                 let is_file = entry[0] == 0;
                 let name_offset = str_table_offset + read_u24(entry, 0x1) as usize;
                 let offset = read_u32(entry, 0x4) as u64;
-                let size = read_u32(entry, 0x8) as usize;
 
                 let name = CStr::from_bytes_until_nul(&fst[name_offset..]).unwrap().to_str().unwrap();
 
                 if is_file && name.ends_with(".hps") {
-                    tracing::warn!(target: Log::Jukebox, "O: {offset} S: {size} N: {name}");
-                    track_map.insert(offset, (size, name.to_owned()));
+                    if let Some(stage) = hps_to_stage(name) {
+                        track_map.insert(offset, jukebox_path.join(stage));
+                    }
                 }
             }
         }
 
-        Some(TrackList { track_map, jukebox_path })
+        Some(TrackList { track_map })
     }
 
     /// Attempts to find a custom song for the specified offset's `.hps` owning stage
     pub fn find_custom_song(&self, offset: u64) -> Option<Decoder<BufReader<File>>> {
         // Find track matching offset
-        for (track_offset, (track_size, track_name)) in &self.track_map {
-            if offset >= *track_offset && offset < track_offset + *track_size as u64 {
-                let stage = hps_to_stage(&track_name)?;
-                let stage_dir = self.jukebox_path.join(stage);
+        let stage_dir = &self.track_map.get(&offset)?;
 
-                // Get all files in folder
-                let entries = read_dir(&stage_dir).ok()?;
-                let files: Vec<_> = entries
-                    .filter_map(|entry| {
-                        let path = entry.ok()?.path();
-                        if path.is_file() {
-                            let extension = path.extension()?.to_str()?.to_lowercase();
-                            match extension.as_str() {
-                                "mp3" | "wav" | "ogg" | "flac" => return Some(path),
-                                _ => return None,
-                            }
-                        }
-
-                        None
-                    })
-                    .collect();
-
-                // Choose a random file from the stage folder if available
-                if !files.is_empty() {
-                    let random_path = fastrand::choice(files.iter())?;
-                    match File::open(random_path) {
-                        Ok(custom_song_file) => {
-                            if let Ok(custom_song) = rodio::Decoder::new(BufReader::new(custom_song_file)) {
-                                return Some(custom_song);
-                            }
-                        },
-                        Err(e) => {
-                            tracing::error!(target: Log::Jukebox, error = ?e, "Failed to open custom song. Cannot play song.");
-                        },
+        // Get all files in folder
+        let entries = read_dir(&stage_dir).ok()?;
+        let files: Vec<_> = entries
+            .filter_map(|entry| {
+                let path = entry.ok()?.path();
+                if path.is_file() {
+                    let extension = path.extension()?.to_str()?.to_lowercase();
+                    match extension.as_str() {
+                        "mp3" | "wav" | "ogg" | "flac" => return Some(path),
+                        _ => return None,
                     }
                 }
+
+                None
+            })
+            .collect();
+
+        // Choose a random file from the stage folder if available
+        if !files.is_empty() {
+            let random_path = fastrand::choice(files.iter())?;
+            match File::open(random_path) {
+                Ok(custom_song_file) => {
+                    if let Ok(custom_song) = rodio::Decoder::new(BufReader::new(custom_song_file)) {
+                        return Some(custom_song);
+                    }
+                },
+                Err(e) => {
+                    tracing::error!(target: Log::Jukebox, error = ?e, "Failed to open custom song. Cannot play song.");
+                },
             }
         }
 

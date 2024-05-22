@@ -140,7 +140,7 @@ impl Jukebox {
                     // Append stage audio to sink
                     if let Some(custom_song) = track_list
                         .as_ref()
-                        .and_then(|track_list| track_list.find_custom_song(real_hps_offset))
+                        .and_then(|track_list| track_list.find_custom_song(hps_offset))
                     {
                         sink.append(custom_song.repeat_infinite());
                     } else {
