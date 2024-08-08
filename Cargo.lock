@@ -1170,19 +1170,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "slippi-rust-extensions"
-version = "0.1.0"
-dependencies = [
- "cbindgen",
- "dolphin-integrations",
- "slippi-exi-device",
- "slippi-game-reporter",
- "slippi-jukebox",
- "slippi-user",
- "tracing",
-]
-
-[[package]]
 name = "slippi-user"
 version = "0.1.0"
 dependencies = [
@@ -1191,6 +1178,19 @@ dependencies = [
  "serde",
  "serde_json",
  "slippi-gg-api",
+ "tracing",
+]
+
+[[package]]
+name = "slippi_rust_extensions"
+version = "0.1.0"
+dependencies = [
+ "cbindgen",
+ "dolphin-integrations",
+ "slippi-exi-device",
+ "slippi-game-reporter",
+ "slippi-jukebox",
+ "slippi-user",
  "tracing",
 ]
 
