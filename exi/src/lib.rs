@@ -84,8 +84,11 @@ impl SlippiEXIDevice {
             initial_dolphin_music_volume,
         } = config
         {
+            // TODO: Consider passing in user path directly and appending
+            let jukebox_path = self.config.paths.user_json.replace("user.json", "Jukebox");
             match Jukebox::new(
                 self.config.paths.iso.clone(),
+                jukebox_path,
                 initial_dolphin_system_volume,
                 initial_dolphin_music_volume,
             ) {
