@@ -17,7 +17,7 @@ use slippi_gg_api::APIClient;
 use crate::types::{GameReport, GameReportRequestPayload, OnlinePlayMode};
 use crate::{CompletionEvent, ProcessingEvent};
 
-const GRAPHQL_URL: &str = "https://gql-gateway-dot-slippi.uc.r.appspot.com/graphql";
+const GRAPHQL_URL: &str = "https://gql-gateway-2-dot-slippi.uc.r.appspot.com/graphql";
 
 /// How many times a report should attempt to send.
 const MAX_REPORT_ATTEMPTS: i32 = 5;
