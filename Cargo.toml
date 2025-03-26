@@ -9,6 +9,7 @@ members = [
     "exi",
     "ffi",
     "game-reporter",
+    "rank-info",
     "jukebox",
     "slippi-gg-api",
     "user",

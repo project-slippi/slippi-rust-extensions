@@ -1,0 +1,13 @@
+[package]
+name = "slippi-rank-info"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_repr = { workspace = true }
+slippi-gg-api = { path = "../slippi-gg-api" }
+slippi-user = { path = "../user" }

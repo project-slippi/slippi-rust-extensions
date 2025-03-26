@@ -1131,6 +1131,7 @@ dependencies = [
  "slippi-game-reporter",
  "slippi-gg-api",
  "slippi-jukebox",
+ "slippi-rank-info",
  "slippi-user",
  "tracing",
 ]
@@ -1170,6 +1171,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "slippi-rank-info"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "slippi-gg-api",
+ "slippi-user",
+]
+
+[[package]]
 name = "slippi-user"
 version = "0.1.0"
 dependencies = [
@@ -1190,6 +1202,7 @@ dependencies = [
  "slippi-exi-device",
  "slippi-game-reporter",
  "slippi-jukebox",
+ "slippi-rank-info",
  "slippi-user",
  "tracing",
 ]

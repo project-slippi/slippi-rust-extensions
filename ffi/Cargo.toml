@@ -40,6 +40,7 @@ playback = [
 [dependencies]
 dolphin-integrations = { path = "../dolphin" }
 slippi-game-reporter = { path = "../game-reporter" }
+slippi-rank-info = { path = "../rank-info" }
 slippi-exi-device = { path = "../exi" }
 slippi-jukebox = { path = "../jukebox" }
 slippi-user = { path = "../user" }

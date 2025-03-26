@@ -7,6 +7,7 @@
 
 use dolphin_integrations::Log;
 use slippi_game_reporter::GameReporter;
+use slippi_rank_info::RankInfo;
 use slippi_gg_api::APIClient;
 use slippi_jukebox::Jukebox;
 use slippi_user::UserManager;
@@ -47,6 +48,8 @@ impl SlippiEXIDevice {
         );
 
         let game_reporter = GameReporter::new(api_client.clone(), user_manager.clone(), config.paths.iso.clone());
+
+        let rank_info = RankInfo::new(api_client.clone(), user_manager.clone());
 
         // Playback has no need to deal with this.
         // (We could maybe silo more?)
