@@ -1,4 +1,5 @@
 use std::ffi::{c_char, c_int, CString};
+use dolphin_integrations::{Color, Dolphin, Duration as OSDDuration, Log};
 
 use slippi_exi_device::SlippiEXIDevice;
 

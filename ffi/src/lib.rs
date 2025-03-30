@@ -14,6 +14,7 @@ pub mod game_reporter;
 pub mod jukebox;
 pub mod logger;
 pub mod user;
+pub mod rank_info;
 
 /// A small helper method for moving in and out of our known types.
 ///

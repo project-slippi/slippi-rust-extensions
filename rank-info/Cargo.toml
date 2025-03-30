@@ -7,6 +7,8 @@ edition = "2021"
 
 [dependencies]
 serde = { workspace = true }
+tracing = { workspace = true }
+dolphin-integrations = { path = "../dolphin" }
 serde_json = { workspace = true }
 serde_repr = { workspace = true }
 slippi-gg-api = { path = "../slippi-gg-api" }

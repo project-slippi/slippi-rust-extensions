@@ -1174,11 +1174,13 @@ dependencies = [
 name = "slippi-rank-info"
 version = "0.1.0"
 dependencies = [
+ "dolphin-integrations",
  "serde",
  "serde_json",
  "serde_repr",
  "slippi-gg-api",
  "slippi-user",
+ "tracing",
 ]
 
 [[package]]
