@@ -33,7 +33,7 @@ pub enum SlippiRank {
     Grandmaster,
 }
 
-#[derive(Debug, Default, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct RankInfoAPIResponse  {
     #[serde(alias = "ratingOrdinal")]
     pub rating_ordinal: f32,
@@ -57,10 +57,19 @@ pub struct RankInfoAPIResponse  {
     pub continent: Option<String>
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct RankInfo {
+    pub rank: u8,
+    pub rating_ordinal: f32,
+    pub global_placing: u8,
+    pub regional_placing: u8,
+    pub rating_update_count: u32,
+}
+
 #[derive(Debug)]
 pub struct RankManager {
     pub api_client: APIClient,
-    pub last_response: RankInfoAPIResponse
+    pub last_rank: Option<RankInfo>
 }
 
 // TODO :: Change RankInfo to RankManager and just store the api_client, remove all other fields.
@@ -71,11 +80,11 @@ impl RankManager {
     pub fn new(api_client: APIClient) -> Self {
         Self {
             api_client: api_client,
-            last_response: RankInfoAPIResponse::default()
+            last_rank: None
         }
     }
 
-    pub fn decide_rank(rating_ordinal: f32, global_placing: u8, regional_placing: u8, rating_update_count: u32) -> SlippiRank {
+    pub fn get_rank(rating_ordinal: f32, global_placing: u8, regional_placing: u8, rating_update_count: u32) -> SlippiRank {
         if rating_update_count < 5 {
             return SlippiRank::Unranked;
         }
@@ -139,7 +148,7 @@ impl RankManager {
         SlippiRank::Unranked
     }
 
-    pub fn fetch_user_rank(&self, connect_code: &str) -> Result<RankInfoAPIResponse, GetRankErrorKind> {
+    pub fn fetch_user_rank(&mut self, connect_code: &str) -> Result<RankInfo, GetRankErrorKind> {
         let profile_fields = r#"
             fragment profileFieldsV2 on NetplayProfileV2 {
                 ratingOrdinal
@@ -190,7 +199,23 @@ impl RankManager {
                 tracing::info!(target: Log::SlippiOnline, ?value);
                 let rank_response: Result<RankInfoAPIResponse, serde_json::Error> = serde_json::from_str(&value);
                 match rank_response {
-                    Ok(rank_resp) => Ok(rank_resp),
+                    Ok(rank_resp) => {
+                        let curr_rank = RankInfo { 
+                                rank: RankManager::get_rank(
+                                    rank_resp.rating_ordinal, 
+                                    rank_resp.daily_global_placement.unwrap_or_default(), 
+                                    rank_resp.daily_regional_placement.unwrap_or_default(),
+                                    rank_resp.rating_update_count
+                                ) as u8, 
+                                rating_ordinal: rank_resp.rating_ordinal, 
+                                global_placing: rank_resp.daily_global_placement.unwrap_or_default(), 
+                                regional_placing: rank_resp.daily_regional_placement.unwrap_or_default(), 
+                                rating_update_count: rank_resp.rating_update_count, 
+                            };
+                        // Save last response for getting rank / rating change later
+                        self.last_rank = Some(curr_rank.clone());
+                        Ok(curr_rank)
+                    },
                     Err(_err) => Err(GetRankErrorKind::NotSuccessful("Failed to parse JSON".to_owned())),
                 }
             }
