@@ -1,13 +1,9 @@
 use slippi_gg_api::APIClient;
-use dolphin_integrations::{Color, Dolphin, Duration as OSDDuration, Log};
-use slippi_user::UserManager;
-use slippi_user::UserInfo;
-use serde::Deserialize;
-use serde_json::{json, Value};
+use dolphin_integrations::Log;
 
 mod utils;
 use utils::GetRankErrorKind;
-use utils::execute_graphql_query;
+use utils::execute_rank_query;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SlippiRank {
@@ -71,10 +67,6 @@ pub struct RankManager {
     pub api_client: APIClient,
     pub last_rank: Option<RankInfo>
 }
-
-// TODO :: Change RankInfo to RankManager and just store the api_client, remove all other fields.
-//      :: Call RankManager::fetch_user_rank from the EXI device and use the user's connect code.
-//      :: Send data to dolphin.
 
 impl RankManager {
     pub fn new(api_client: APIClient) -> Self {
@@ -149,52 +141,7 @@ impl RankManager {
     }
 
     pub fn fetch_user_rank(&mut self, connect_code: &str) -> Result<RankInfo, GetRankErrorKind> {
-        let profile_fields = r#"
-            fragment profileFieldsV2 on NetplayProfileV2 {
-                ratingOrdinal
-                ratingUpdateCount
-                wins
-                losses
-                dailyGlobalPlacement
-                dailyRegionalPlacement
-                continent
-            }
-        "#;
-
-        let user_profile_page = r#"
-            fragment userProfilePage on User {
-                rankedNetplayProfile {
-                    ...profileFieldsV2
-                }
-            }
-        "#;
-
-        // Combine everything into the main query
-        let rank_info_query = format!(r#"
-            {user_profile_page}
-            {profile_fields}
-
-            query AccountManagementPageQuery($cc: String!, $uid: String!) {{
-                getUser(fbUid: $uid) {{
-                    ...userProfilePage
-                }}
-                getConnectCode(code: $cc) {{
-                    user {{
-                        ...userProfilePage
-                    }}
-                }}
-            }}
-        "#);
-
-        let variables = Some(json!({
-            "cc": connect_code,
-            "uid": connect_code
-        }));
-
-        // TODO :: get api_client from self
-        let res = execute_graphql_query(&self.api_client, &rank_info_query, variables);
-
-        match res {
+        match execute_rank_query(&self.api_client, connect_code) {
             Ok(value) => {
                 tracing::info!(target: Log::SlippiOnline, ?value);
                 let rank_response: Result<RankInfoAPIResponse, serde_json::Error> = serde_json::from_str(&value);
@@ -216,11 +163,10 @@ impl RankManager {
                         self.last_rank = Some(curr_rank.clone());
                         Ok(curr_rank)
                     },
-                    Err(_err) => Err(GetRankErrorKind::NotSuccessful("Failed to parse JSON".to_owned())),
+                    Err(_err) => Err(GetRankErrorKind::NotSuccessful("Failed to fetch rank data".to_owned())),
                 }
             }
             Err(err) => Err(err)
         }
     }
 }
-

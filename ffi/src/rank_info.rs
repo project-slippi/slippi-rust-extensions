@@ -1,17 +1,13 @@
-use std::ffi::c_char;
 use std::ffi::c_float;
 use std::ffi::c_uchar;
 use std::ffi::c_uint;
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::ffi::{c_int, CString};
+use std::ffi::c_int;
 use slippi_exi_device::SlippiEXIDevice;
-use dolphin_integrations::{Color, Dolphin, Duration as OSDDuration, Log};
+use dolphin_integrations::Log;
 
 use slippi_rank_info::RankManager;
-use slippi_rank_info::SlippiRank;
 
-use crate::{c_str_to_string, with, with_returning};
+use crate::{with_returning};
 
 #[repr(C)]
 pub struct RustRankInfo {
@@ -24,9 +20,7 @@ pub struct RustRankInfo {
     pub rank_change: c_int,
 }
 
-/// Creates a new Player Report and leaks it, returning the pointer.
-///
-/// This should be passed on to a GameReport for processing.
+/// Fetches the rank information of the user currently logged in.
 #[no_mangle]
 pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> *mut RustRankInfo {
     with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, |device| {
@@ -35,10 +29,7 @@ pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> *mut Ru
 
             // TODO :: rating change is sometimes getting reapplied when it has already played
 
-            // TODO :: Calculate current rank based on rank - prev_rank
-            //      :: if you end a match your new rank will be displayed first
-            //      :: also 
-            let mut prev_rank= match &device.rank_info.last_rank {
+            let prev_rank= match &device.rank_manager.last_rank {
                 Some(last_rank) => {
                     tracing::info!(target: Log::SlippiOnline, "last rank: {}", last_rank.rank);
                     last_rank.rank as i8
@@ -46,7 +37,7 @@ pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> *mut Ru
                 None => 0
             };
 
-            let mut prev_rating_ordinal= match &device.rank_info.last_rank {
+            let mut prev_rating_ordinal= match &device.rank_manager.last_rank {
                 Some(last_rank) => {
                     tracing::info!(target: Log::SlippiOnline, "last rating: {}", last_rank.rating_ordinal);
                     last_rank.rating_ordinal
@@ -54,9 +45,7 @@ pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> *mut Ru
                 None => 0.0 
             };
 
-            let res = RankManager::fetch_user_rank(&mut device.rank_info, connect_code_str);
-
-            match res {
+            match RankManager::fetch_user_rank(&mut device.rank_manager, connect_code_str) {
                 Ok(value) => {
                     let mut curr_rank = RankManager::get_rank(
                             value.rating_ordinal, 
@@ -69,7 +58,8 @@ pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> *mut Ru
                     // prev_rank = SlippiRank::Silver1 as i8;
                     // let mut curr_rank = SlippiRank::Silver2 as i8;
 
-                    let mut rank_change: i8;
+                    // TODO :: clean this up
+                    let rank_change: i8;
                     if prev_rank == 0 {
                         rank_change = 0;
                     }
@@ -110,8 +100,6 @@ pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> *mut Ru
                 }
             }
         });
-
-        tracing::info!(target: Log::SlippiOnline, "rank change: {}", rank_info.rank_change);
         Box::into_raw(rank_info)
     })
 }

@@ -20,7 +20,7 @@ pub use config::{Config, FilePathsConfig, SCMConfig};
 pub struct SlippiEXIDevice {
     config: Config,
     pub game_reporter: GameReporter,
-    pub rank_info: RankManager,
+    pub rank_manager: RankManager,
     pub user_manager: UserManager,
     pub jukebox: Option<Jukebox>,
 }
@@ -50,7 +50,7 @@ impl SlippiEXIDevice {
 
         let game_reporter = GameReporter::new(api_client.clone(), user_manager.clone(), config.paths.iso.clone());
 
-        let rank_info = RankManager::new(api_client.clone());
+        let rank_manager= RankManager::new(api_client.clone());
 
         // Playback has no need to deal with this.
         // (We could maybe silo more?)
@@ -61,7 +61,7 @@ impl SlippiEXIDevice {
             config,
             game_reporter,
             user_manager,
-            rank_info,
+            rank_manager,
             jukebox: None,
         }
     }

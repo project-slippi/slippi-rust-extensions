@@ -1,5 +1,4 @@
 use slippi_gg_api::APIClient;
-use dolphin_integrations::{Color, Dolphin, Duration as OSDDuration, Log};
 use serde_json::{json, Value};
 
 const GRAPHQL_URL: &str = "https://gql-gateway-2-dot-slippi.uc.r.appspot.com/graphql";
@@ -13,11 +12,51 @@ pub enum GetRankErrorKind {
     NotSuccessful(String),
 }
 
-pub(crate) fn execute_graphql_query(
+pub(crate) fn execute_rank_query(
     api_client: &APIClient,
-    query: &str,
-    variables: Option<Value>,
+    connect_code: &str,
 ) -> Result<String, GetRankErrorKind> {
+    let profile_fields = r#"
+        fragment profileFieldsV2 on NetplayProfileV2 {
+            ratingOrdinal
+            ratingUpdateCount
+            wins
+            losses
+            dailyGlobalPlacement
+            dailyRegionalPlacement
+            continent
+        }
+    "#;
+
+    let user_profile_page = r#"
+        fragment userProfilePage on User {
+            rankedNetplayProfile {
+                ...profileFieldsV2
+            }
+        }
+    "#;
+
+    let query = format!(r#"
+        {user_profile_page}
+        {profile_fields}
+
+        query AccountManagementPageQuery($cc: String!, $uid: String!) {{
+            getUser(fbUid: $uid) {{
+                ...userProfilePage
+            }}
+            getConnectCode(code: $cc) {{
+                user {{
+                    ...userProfilePage
+                }}
+            }}
+        }}
+    "#);
+
+    let variables = Some(json!({
+        "cc": connect_code,
+        "uid": connect_code
+    }));
+
     // Prepare the GraphQL request payload
     let request_body = match variables {
         Some(vars) => json!({
