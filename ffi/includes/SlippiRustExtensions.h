@@ -58,7 +58,7 @@ struct RustRankInfo {
   unsigned char regional_placing;
   unsigned int rating_update_count;
   float rating_change;
-  char rank_change;
+  int rank_change;
 };
 
 extern "C" {

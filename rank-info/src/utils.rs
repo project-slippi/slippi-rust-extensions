@@ -13,7 +13,6 @@ pub enum GetRankErrorKind {
     NotSuccessful(String),
 }
 
-/// Prepares and executes a GraphQL query.
 pub(crate) fn execute_graphql_query(
     api_client: &APIClient,
     query: &str,
