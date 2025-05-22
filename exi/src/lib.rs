@@ -6,6 +6,7 @@
 //! Slippi stuff is happening" and enables us to let the Rust side live in its own world.
 
 use dolphin_integrations::Log;
+use slippi_discord_rpc::DiscordActivityHandler;
 use slippi_game_reporter::GameReporter;
 use slippi_gg_api::APIClient;
 use slippi_jukebox::Jukebox;
@@ -14,6 +15,24 @@ use slippi_user::UserManager;
 mod config;
 pub use config::{Config, FilePathsConfig, SCMConfig};
 
+/// Configuration instructions that the FFI layer uses to call over here.
+#[derive(Debug)]
+pub enum JukeboxConfiguration {
+    Start {
+        initial_dolphin_system_volume: u8,
+        initial_dolphin_music_volume: u8,
+    },
+
+    Stop,
+}
+
+/// Configuration instructions that the FFI layer uses to call over here.
+#[derive(Debug)]
+pub enum DiscordActivityHandlerConfiguration {
+    Start { m_p_ram: usize },
+    Stop,
+}
+
 /// An EXI Device subclass specific to managing and interacting with the game itself.
 #[derive(Debug)]
 pub struct SlippiEXIDevice {
@@ -21,14 +40,7 @@ pub struct SlippiEXIDevice {
     pub game_reporter: GameReporter,
     pub user_manager: UserManager,
     pub jukebox: Option<Jukebox>,
-}
-
-pub enum JukeboxConfiguration {
-    Start {
-        initial_dolphin_system_volume: u8,
-        initial_dolphin_music_volume: u8,
-    },
-    Stop,
+    pub discord_handler: Option<DiscordActivityHandler>,
 }
 
 impl SlippiEXIDevice {
@@ -58,6 +70,7 @@ impl SlippiEXIDevice {
             game_reporter,
             user_manager,
             jukebox: None,
+            discord_handler: None,
         }
     }
 
@@ -66,6 +79,13 @@ impl SlippiEXIDevice {
 
     /// Stubbed for now, but this would get called by the C++ EXI device on DMARead.
     pub fn dma_read(&mut self, _address: usize, _size: usize) {}
+
+    /// Called when the Memory system on Dolphin has initialized - i.e, when it's safe to
+    /// check and read the offset for memory watching. This launches any background tasks that
+    /// need access to that parameter.
+    pub fn on_memory_initialized(&mut self, m_p_ram: usize) {
+        self.configure_discord_handler(DiscordActivityHandlerConfiguration::Start { m_p_ram });
+    }
 
     /// Configures a new Jukebox, or ensures an existing one is dropped if it's being disabled.
     pub fn configure_jukebox(&mut self, config: JukeboxConfiguration) {
@@ -98,6 +118,41 @@ impl SlippiEXIDevice {
                     error = ?e,
                     "Failed to start Jukebox"
                 ),
+            }
+        }
+    }
+
+    /// Configures a new Discord handler, or ensures an existing one is dropped if it's being
+    /// disabled.
+    pub fn configure_discord_handler(&mut self, config: DiscordActivityHandlerConfiguration) {
+        if let DiscordActivityHandlerConfiguration::Stop = config {
+            self.discord_handler = None;
+            return;
+        }
+
+        // if let Some(discord_handler) = &mut self.discord_handler {
+        //     if let DiscordActivityHandlerConfiguration::UpdateConfig { config } = config {
+        //         // discord_handler.update_config(config);
+        //         return;
+        //     }
+
+        //     tracing::warn!(target: Log::SlippiOnline, "Discord handler is already running.");
+        //     return;
+        // }
+
+        if let DiscordActivityHandlerConfiguration::Start { m_p_ram } = config {
+            match DiscordActivityHandler::new(m_p_ram) {
+                Ok(handler) => {
+                    self.discord_handler = Some(handler);
+                },
+
+                Err(e) => {
+                    tracing::error!(
+                        target: Log::SlippiOnline,
+                        error = ?e,
+                        "Failed to start Discord handler"
+                    );
+                },
             }
         }
     }
