@@ -39,8 +39,8 @@ pub(crate) fn execute_rank_query(
         {user_profile_page}
         {profile_fields}
 
-        query AccountManagementPageQuery($cc: String!, $uid: String!) {{
-            getUser(fbUid: $uid) {{
+        query UserProfilePageQuery($cc: String, $uid: String) {{
+            getUser(fbUid: $uid, connectCode: $cc) {{
                 ...userProfilePage
             }}
         }}
@@ -82,16 +82,13 @@ pub(crate) fn execute_rank_query(
     }
 
     if let Some(data) = response_json.get("data") {
-        if let Some(get_connect_code) = data.get("getConnectCode") {
-            if let Some(user) = get_connect_code.get("user") {
-                if let Some(profile) = user.get("rankedNetplayProfile") {
-                    return Ok(profile.to_string());
-                }
-                return Err(GetRankErrorKind::NotSuccessful("rankedNetplayProfile".into()));
+        if let Some(get_user) = data.get("getUser") {
+            if let Some(profile) = get_user.get("rankedNetplayProfile") {
+                return Ok(profile.to_string());
             }
-            return Err(GetRankErrorKind::NotSuccessful("user".into()));
+            return Err(GetRankErrorKind::NotSuccessful("rankedNetplayProfile".into()));
         }
-        return Err(GetRankErrorKind::NotSuccessful("getConnectCode".into()));
+        return Err(GetRankErrorKind::NotSuccessful("getUser".into()));
     } else {
         Err(GetRankErrorKind::GraphQL(
             "No 'data' field in the GraphQL response.".to_string(),

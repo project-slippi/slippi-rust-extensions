@@ -55,6 +55,7 @@ pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> *mut Ru
                         ) as i8;
 
                     // TODO :: clear last rank on log out
+                    // TODO :: if you win a match during placements it shows you your rating after the game
                     // TODO :: clean this up
                     let rank_change: i8;
                     if prev_rank == 0 {
