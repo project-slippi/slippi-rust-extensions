@@ -54,10 +54,7 @@ pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> *mut Ru
                             value.rating_update_count
                         ) as i8;
 
-                    // prev_rating_ordinal = 1072.3;
-                    // prev_rank = SlippiRank::Silver1 as i8;
-                    // let mut curr_rank = SlippiRank::Silver2 as i8;
-
+                    // TODO :: clear last rank on log out
                     // TODO :: clean this up
                     let rank_change: i8;
                     if prev_rank == 0 {
@@ -68,20 +65,24 @@ pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> *mut Ru
                         curr_rank = prev_rank;
                     }
 
-                    let curr_rating_ordinal = value.rating_ordinal;
-                    // let curr_rating_ordinal = 1101.22;
+                    let mut curr_rating_ordinal = value.rating_ordinal;
 
+                    let rating_change: f32;
                     if prev_rating_ordinal == 0.0 {
-                        prev_rating_ordinal = curr_rating_ordinal;
+                        rating_change = 0.0;
+                    }
+                    else {
+                        rating_change = curr_rating_ordinal - prev_rating_ordinal;
+                        curr_rating_ordinal = prev_rating_ordinal;
                     }
 
                     Box::new(RustRankInfo {
-                        rank: curr_rank as c_uchar,
-                        rating_ordinal: value.rating_ordinal,
+                        rank: if value.rating_update_count < 5 { 0 as c_uchar } else { curr_rank as c_uchar },
+                        rating_ordinal: curr_rating_ordinal as c_float,
                         global_placing: value.global_placing,
                         regional_placing: value.regional_placing,
                         rating_update_count: value.rating_update_count,
-                        rating_change: curr_rating_ordinal - prev_rating_ordinal,
+                        rating_change: rating_change,
                         rank_change: rank_change as c_int,
                     })
                 }

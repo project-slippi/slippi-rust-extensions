@@ -266,9 +266,7 @@ RustChatMessages *slprs_user_get_default_messages(uintptr_t exi_device_instance_
 /// by converting it into the proper Rust types.
 void slprs_user_free_messages(RustChatMessages *ptr);
 
-/// Creates a new Player Report and leaks it, returning the pointer.
-///
-/// This should be passed on to a GameReport for processing.
+/// Fetches the rank information of the user currently logged in.
 RustRankInfo *slprs_get_rank_info(uintptr_t exi_device_instance_ptr);
 
 } // extern "C"

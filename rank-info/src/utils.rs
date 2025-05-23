@@ -1,7 +1,7 @@
 use slippi_gg_api::APIClient;
 use serde_json::{json, Value};
 
-const GRAPHQL_URL: &str = "https://gql-gateway-2-dot-slippi.uc.r.appspot.com/graphql";
+const GRAPHQL_URL: &str = "https://internal.slippi.gg/graphql";
 
 /// The true inner error, minus any metadata.
 #[derive(Debug)]
@@ -17,21 +17,20 @@ pub(crate) fn execute_rank_query(
     connect_code: &str,
 ) -> Result<String, GetRankErrorKind> {
     let profile_fields = r#"
-        fragment profileFieldsV2 on NetplayProfileV2 {
+        fragment profileFields on NetplayProfile {
             ratingOrdinal
             ratingUpdateCount
             wins
             losses
             dailyGlobalPlacement
             dailyRegionalPlacement
-            continent
         }
     "#;
 
     let user_profile_page = r#"
         fragment userProfilePage on User {
             rankedNetplayProfile {
-                ...profileFieldsV2
+                ...profileFields
             }
         }
     "#;
@@ -43,11 +42,6 @@ pub(crate) fn execute_rank_query(
         query AccountManagementPageQuery($cc: String!, $uid: String!) {{
             getUser(fbUid: $uid) {{
                 ...userProfilePage
-            }}
-            getConnectCode(code: $cc) {{
-                user {{
-                    ...userProfilePage
-                }}
             }}
         }}
     "#);
