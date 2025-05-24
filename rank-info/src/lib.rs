@@ -143,7 +143,7 @@ impl RankManager {
     pub fn fetch_user_rank(&mut self, connect_code: &str) -> Result<RankInfo, GetRankErrorKind> {
         match execute_rank_query(&self.api_client, connect_code) {
             Ok(value) => {
-                tracing::info!(target: Log::SlippiOnline, ?value);
+                // tracing::info!(target: Log::SlippiOnline, ?value);
                 let rank_response: Result<RankInfoAPIResponse, serde_json::Error> = serde_json::from_str(&value);
                 match rank_response {
                     Ok(rank_resp) => {

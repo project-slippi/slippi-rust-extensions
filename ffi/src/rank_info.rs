@@ -4,6 +4,7 @@ use std::ffi::c_uint;
 use std::ffi::c_int;
 use slippi_exi_device::SlippiEXIDevice;
 use dolphin_integrations::Log;
+use slippi_rank_info::SlippiRank;
 
 use slippi_rank_info::RankManager;
 
@@ -27,11 +28,8 @@ pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> *mut Ru
         let rank_info = device.user_manager.get(|user| {
             let connect_code_str = user.connect_code.as_str();
 
-            // TODO :: rating change is sometimes getting reapplied when it has already played
-
             let prev_rank= match &device.rank_manager.last_rank {
                 Some(last_rank) => {
-                    tracing::info!(target: Log::SlippiOnline, "last rank: {}", last_rank.rank);
                     last_rank.rank as i8
                 },
                 None => 0
@@ -39,46 +37,48 @@ pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> *mut Ru
 
             let mut prev_rating_ordinal= match &device.rank_manager.last_rank {
                 Some(last_rank) => {
-                    tracing::info!(target: Log::SlippiOnline, "last rating: {}", last_rank.rating_ordinal);
                     last_rank.rating_ordinal
                 },
                 None => 0.0 
             };
 
+            // TODO :: clear last rank on log out
             match RankManager::fetch_user_rank(&mut device.rank_manager, connect_code_str) {
                 Ok(value) => {
-                    let mut curr_rank = RankManager::get_rank(
-                            value.rating_ordinal, 
-                            value.global_placing, 
-                            value.regional_placing, 
-                            value.rating_update_count
-                        ) as i8;
+                    let has_cached_rank = prev_rank != 0;
 
-                    // TODO :: clear last rank on log out
-                    // TODO :: if you win a match during placements it shows you your rating after the game
-                    // TODO :: clean this up
-                    let rank_change: i8;
-                    if prev_rank == 0 {
-                        rank_change = 0;
-                    }
-                    else {
-                        rank_change = curr_rank - prev_rank;
-                        curr_rank = prev_rank;
-                    }
+                    let mut curr_rank = 
+                        if !has_cached_rank { 
+                            RankManager::get_rank(
+                                value.rating_ordinal, 
+                                value.global_placing, 
+                                value.regional_placing, 
+                                value.rating_update_count
+                            ) as i8
+                        } 
+                        else { prev_rank };
 
-                    let mut curr_rating_ordinal = value.rating_ordinal;
+                    let rank_change: i8 = 
+                        if has_cached_rank { 
+                            curr_rank - prev_rank 
+                        } else { 0 };
 
-                    let rating_change: f32;
-                    if prev_rating_ordinal == 0.0 {
-                        rating_change = 0.0;
-                    }
-                    else {
-                        rating_change = curr_rating_ordinal - prev_rating_ordinal;
-                        curr_rating_ordinal = prev_rating_ordinal;
-                    }
+                    let has_cached_rating = prev_rating_ordinal != 0.0;
+
+                    let mut curr_rating_ordinal = 
+                        if !has_cached_rating { 
+                            value.rating_ordinal 
+                        } else { 
+                            prev_rating_ordinal 
+                        };
+
+                    let rating_change: f32 =
+                        if has_cached_rating { 
+                            curr_rating_ordinal - prev_rating_ordinal
+                        } else { 0.0 };
 
                     Box::new(RustRankInfo {
-                        rank: if value.rating_update_count < 5 { 0 as c_uchar } else { curr_rank as c_uchar },
+                        rank: curr_rank as c_uchar,
                         rating_ordinal: curr_rating_ordinal as c_float,
                         global_placing: value.global_placing,
                         regional_placing: value.regional_placing,
