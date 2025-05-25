@@ -76,6 +76,10 @@ impl RankManager {
         }
     }
 
+    pub fn clear(&mut self) {
+        self.last_rank = None;
+    }
+
     pub fn get_rank(rating_ordinal: f32, global_placing: u8, regional_placing: u8, rating_update_count: u32) -> SlippiRank {
         if rating_update_count < 5 {
             return SlippiRank::Unranked;

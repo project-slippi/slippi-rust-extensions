@@ -42,6 +42,7 @@ pub extern "C" fn slprs_user_listen_for_login(exi_device_instance_ptr: usize) {
 #[no_mangle]
 pub extern "C" fn slprs_user_logout(exi_device_instance_ptr: usize) {
     with::<SlippiEXIDevice, _>(exi_device_instance_ptr, |device| {
+        device.rank_manager.clear();
         device.user_manager.logout();
     });
 }
