@@ -26,24 +26,19 @@ pub struct RustRankInfo {
 pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> *mut RustRankInfo {
     with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, |device| {
         let rank_info = device.user_manager.get(|user| {
-            let connect_code_str = user.connect_code.as_str();
 
+            // Get cached rank data if it exists
             let prev_rank= match &device.rank_manager.last_rank {
-                Some(last_rank) => {
-                    last_rank.rank as i8
-                },
+                Some(last_rank) => last_rank.rank as i8,
                 None => 0
             };
-
             let prev_rating_ordinal= match &device.rank_manager.last_rank {
-                Some(last_rank) => {
-                    last_rank.rating_ordinal
-                },
+                Some(last_rank) => last_rank.rating_ordinal,
                 None => 0.0 
             };
 
-            // TODO :: clear last rank on log out
             // TODO :: return cached rank if request fails
+            let connect_code_str = user.connect_code.as_str();
             match RankManager::fetch_user_rank(&mut device.rank_manager, connect_code_str) {
                 Ok(value) => {
                     let has_cached_rating = prev_rating_ordinal != 0.0;
