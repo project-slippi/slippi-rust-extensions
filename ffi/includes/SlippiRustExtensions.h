@@ -52,6 +52,7 @@ struct RustChatMessages {
 };
 
 struct RustRankInfo {
+  unsigned char status;
   unsigned char rank;
   float rating_ordinal;
   unsigned char global_placing;

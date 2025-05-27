@@ -5,6 +5,14 @@ mod utils;
 use utils::GetRankErrorKind;
 use utils::execute_rank_query;
 
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RankInfoResponseStatus {
+    Error,
+    Unreported,
+    Success
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SlippiRank {
     Unranked,
@@ -27,6 +35,7 @@ pub enum SlippiRank {
     Master2,
     Master3,
     Grandmaster,
+    Count
 }
 
 #[derive(Debug, Clone, Default, serde::Deserialize)]
@@ -147,7 +156,6 @@ impl RankManager {
     pub fn fetch_user_rank(&mut self, connect_code: &str) -> Result<RankInfo, GetRankErrorKind> {
         match execute_rank_query(&self.api_client, connect_code) {
             Ok(value) => {
-                // tracing::info!(target: Log::SlippiOnline, ?value);
                 let rank_response: Result<RankInfoAPIResponse, serde_json::Error> = serde_json::from_str(&value);
                 match rank_response {
                     Ok(rank_resp) => {
@@ -167,7 +175,7 @@ impl RankManager {
                         self.last_rank = Some(curr_rank.clone());
                         Ok(curr_rank)
                     },
-                    Err(_err) => Err(GetRankErrorKind::NotSuccessful("Failed to fetch rank data".to_owned())),
+                    Err(_err) => Err(GetRankErrorKind::NotSuccessful("Failed to parse rank struct".to_owned())),
                 }
             }
             Err(err) => Err(err)

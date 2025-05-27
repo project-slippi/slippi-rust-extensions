@@ -4,14 +4,16 @@ use std::ffi::c_uint;
 use std::ffi::c_int;
 use slippi_exi_device::SlippiEXIDevice;
 use dolphin_integrations::Log;
-use slippi_rank_info::SlippiRank;
 
+use slippi_rank_info::SlippiRank;
+use slippi_rank_info::RankInfoResponseStatus;
 use slippi_rank_info::RankManager;
 
 use crate::{with_returning};
 
 #[repr(C)]
 pub struct RustRankInfo {
+    pub status: c_uchar,
     pub rank: c_uchar,
     pub rating_ordinal: c_float,
     pub global_placing: c_uchar,
@@ -36,11 +38,25 @@ pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> *mut Ru
                 Some(last_rank) => last_rank.rating_ordinal,
                 None => 0.0 
             };
+            let prev_matches_played= match &device.rank_manager.last_rank{
+                Some(last_rank) => last_rank.rating_update_count,
+                None => 0 
+            };
 
-            // TODO :: return cached rank if request fails
             let connect_code_str = user.connect_code.as_str();
             match RankManager::fetch_user_rank(&mut device.rank_manager, connect_code_str) {
                 Ok(value) => {
+
+                    // Determine if rank response has successfully pulled updated info,
+                    // or if we have pulled the same data and the match is unreported
+                    let resp_status = 
+                        if value.rating_ordinal == prev_rating_ordinal && value.rating_update_count != prev_matches_played {
+                            RankInfoResponseStatus::Unreported
+                        }
+                        else {
+                            RankInfoResponseStatus::Success
+                        };
+
                     let has_cached_rating = prev_rating_ordinal != 0.0;
                     let has_cached_rank = prev_rank != 0;
 
@@ -70,6 +86,7 @@ pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> *mut Ru
                         } else { 0 };
 
                     Box::new(RustRankInfo {
+                        status: resp_status as c_uchar,
                         rank: (curr_rank - rank_change) as c_uchar,
                         rating_ordinal: curr_rating_ordinal as c_float,
                         global_placing: value.global_placing,
@@ -81,8 +98,10 @@ pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> *mut Ru
                 }
                 Err(err) => {
                     tracing::error!(target: Log::SlippiOnline, "Failed to fetch rank: {:?}", err);
-                    
+
+                    // Send empty struct with an invalid rank so the client knows the request failed
                     Box::new(RustRankInfo {
+                        status: RankInfoResponseStatus::Error as u8,
                         rank: 0,
                         rating_ordinal: 0.0,
                         global_placing: 0,
