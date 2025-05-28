@@ -268,6 +268,9 @@ RustChatMessages *slprs_user_get_default_messages(uintptr_t exi_device_instance_
 void slprs_user_free_messages(RustChatMessages *ptr);
 
 /// Fetches the rank information of the user currently logged in.
-RustRankInfo *slprs_get_rank_info(uintptr_t exi_device_instance_ptr);
+RustRankInfo *slprs_fetch_rank_info(uintptr_t exi_device_instance_ptr);
+
+/// Gets the cached rank information of the user currently logged in.
+void slprs_get_rank_info(uintptr_t exi_device_instance_ptr);
 
 } // extern "C"

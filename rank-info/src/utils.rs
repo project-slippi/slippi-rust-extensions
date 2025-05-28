@@ -1,14 +1,34 @@
 use slippi_gg_api::APIClient;
 use serde_json::{json, Value};
+use thiserror::Error;
 
 const GRAPHQL_URL: &str = "https://internal.slippi.gg/graphql";
 
+#[derive(Error, Debug)]
+pub enum RankManagerError {
+    #[error("Failed to spawn thread: {0}")]
+    ThreadSpawn(std::io::Error),
+
+    #[error("The channel sender has disconnected, implying no further messages will be received.")]
+    ChannelSenderDisconnected(#[from] std::sync::mpsc::RecvError),
+
+    #[error("Unknown RankManager Error")]
+    Unknown,
+}
+
 /// The true inner error, minus any metadata.
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum GetRankErrorKind {
+    #[error("GetRankErrorKind Network")]
     Net(slippi_gg_api::Error),
+
+    #[error("GetRankErrorKind JSON")]
     JSON(serde_json::Error),
+
+    #[error("GetRankErrorKind GraphQL")]
     GraphQL(String),
+
+    #[error("GetRankErrorKind NotSuccessful")]
     NotSuccessful(String),
 }
 

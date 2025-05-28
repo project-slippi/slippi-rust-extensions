@@ -1,10 +1,15 @@
+use serde::de::value::Error;
+use RankManagerError::*;
 use slippi_gg_api::APIClient;
 use dolphin_integrations::Log;
+use std::sync::mpsc::{channel, Receiver, Sender};
+use crate::Message::*;
 
+use std::thread;
 mod utils;
 use utils::GetRankErrorKind;
+use utils::RankManagerError;
 use utils::execute_rank_query;
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RankInfoResponseStatus {
@@ -72,20 +77,63 @@ pub struct RankInfo {
 }
 
 #[derive(Debug)]
+pub enum Message {
+    FetchRank(String),
+    RankManagerDropped,
+}
+
+#[derive(Debug)]
 pub struct RankManager {
     pub api_client: APIClient,
-    pub last_rank: Option<RankInfo>
+    pub last_rank: Option<RankInfo>,
+    pub curr_rank: Option<RankInfo>,
+    tx: Sender<Message>
 }
 
 impl RankManager {
     pub fn new(api_client: APIClient) -> Self {
+        tracing::info!(target: Log::Jukebox, "Initializing Slippi Rank Manager");
+
+        let (tx, rx) = channel::<Message>();
+
+        // Spawn the thread that will handle fetching rank info
+        std::thread::Builder::new()
+            .name("RankInfoFetcherThread".to_string())
+            .spawn(move || {
+                if let Err(e) = Self::start(rx) {
+                    tracing::error!(
+                        target: Log::SlippiOnline,
+                        error = ?e,
+                        "RankInfoFetcherThread thread encountered an error: {e}"
+                    );
+                }
+            })
+            .expect("Failed to spawn RankInfoFetcherThread.");
+
         Self {
             api_client: api_client,
-            last_rank: None
+            curr_rank: None,
+            last_rank: None,
+            tx
+        }
+    }
+
+    fn start(
+        // mut self,
+        rx: Receiver<Message>,
+    ) -> Result<(), RankManagerError> {
+        loop {
+            match rx.recv()? {
+                FetchRank(connect_code) => {
+                    // self.fetch_user_rank("walz#0");
+                },
+                RankManagerDropped => {}
+            }
         }
     }
 
     pub fn clear(&mut self) {
+        self.curr_rank = None;
         self.last_rank = None;
     }
 
