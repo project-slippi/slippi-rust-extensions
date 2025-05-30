@@ -1,7 +1,9 @@
+use fetcher::RankInfoFetcher;
 use serde::de::value::Error;
 use RankManagerError::*;
 use slippi_gg_api::APIClient;
 use dolphin_integrations::Log;
+use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use crate::Message::*;
 
@@ -10,6 +12,10 @@ mod utils;
 use utils::GetRankErrorKind;
 use utils::RankManagerError;
 use utils::execute_rank_query;
+
+use slippi_user::*;
+
+mod fetcher;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RankInfoResponseStatus {
@@ -43,29 +49,6 @@ pub enum SlippiRank {
     Count
 }
 
-#[derive(Debug, Clone, Default, serde::Deserialize)]
-pub struct RankInfoAPIResponse  {
-    #[serde(alias = "ratingOrdinal")]
-    pub rating_ordinal: f32,
-
-    #[serde(alias = "ratingUpdateCount")]
-    pub rating_update_count: u32,
-
-    #[serde(alias = "wins")]
-    pub wins: u32,
-
-    #[serde(alias = "losses")]
-    pub losses: u32,
-
-    #[serde(alias = "dailyGlobalPlacement", default)]
-    pub daily_global_placement: Option<u8>,
-
-    #[serde(alias = "dailyRegionalPlacement", default)]
-    pub daily_regional_placement: Option<u8>,
-
-    #[serde(alias = "continent", default)]
-    pub continent: Option<String>
-}
 
 #[derive(Debug, Clone, Default)]
 pub struct RankInfo {
@@ -78,66 +61,63 @@ pub struct RankInfo {
 
 #[derive(Debug)]
 pub enum Message {
-    FetchRank(String),
-    RankManagerDropped,
+    FetchRank,
+    RankFetcherDropped,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RankManagerData {
+    pub current_rank: Option<RankInfo>,
+    pub previous_rank: Option<RankInfo>,
 }
 
 #[derive(Debug)]
 pub struct RankManager {
-    pub api_client: APIClient,
-    pub last_rank: Option<RankInfo>,
-    pub curr_rank: Option<RankInfo>,
-    tx: Sender<Message>
+    tx: Sender<Message>,
+    rank_data: Arc<Mutex<RankManagerData>>,
 }
 
 impl RankManager {
-    pub fn new(api_client: APIClient) -> Self {
-        tracing::info!(target: Log::Jukebox, "Initializing Slippi Rank Manager");
-
+    pub fn new(api_client: APIClient, user_manager: UserManager) -> Self {
         let (tx, rx) = channel::<Message>();
+        let rank_data = Arc::new(Mutex::new(RankManagerData::default()));
 
-        // Spawn the thread that will handle fetching rank info
-        std::thread::Builder::new()
-            .name("RankInfoFetcherThread".to_string())
+        let fetcher = RankInfoFetcher::new(
+            api_client.clone(), 
+            user_manager.clone(),
+            rank_data.clone(),
+        );
+        
+        let fetcher_thread = thread::Builder::new()
+            .name("RankInfoFetcherThread".into())
             .spawn(move || {
-                if let Err(e) = Self::start(rx) {
-                    tracing::error!(
-                        target: Log::SlippiOnline,
-                        error = ?e,
-                        "RankInfoFetcherThread thread encountered an error: {e}"
-                    );
-                }
+                fetcher::run(fetcher, rx);
             })
             .expect("Failed to spawn RankInfoFetcherThread.");
 
         Self {
-            api_client: api_client,
-            curr_rank: None,
-            last_rank: None,
-            tx
+            tx,
+            rank_data,
         }
     }
 
-    fn start(
-        // mut self,
-        rx: Receiver<Message>,
-    ) -> Result<(), RankManagerError> {
-        loop {
-            match rx.recv()? {
-                FetchRank(connect_code) => {
-                    // self.fetch_user_rank("walz#0");
-                },
-                RankManagerDropped => {}
-            }
-        }
+    pub fn fetch_rank(&self)
+    {
+        // Send a message to the rank fetcher with the user's connect code
+        let _ = self.tx.send(FetchRank);
+    }
+
+    pub fn get_rank(&self) -> Option<RankInfo> {
+        self.rank_data.lock().unwrap().current_rank.clone()
     }
 
     pub fn clear(&mut self) {
-        self.curr_rank = None;
-        self.last_rank = None;
+        let mut data = self.rank_data.lock().unwrap();
+        data.current_rank = None;
+        data.previous_rank = None;
     }
 
-    pub fn get_rank(rating_ordinal: f32, global_placing: u8, regional_placing: u8, rating_update_count: u32) -> SlippiRank {
+    pub fn decide_rank(rating_ordinal: f32, global_placing: u8, regional_placing: u8, rating_update_count: u32) -> SlippiRank {
         if rating_update_count < 5 {
             return SlippiRank::Unranked;
         }
@@ -201,32 +181,18 @@ impl RankManager {
         SlippiRank::Unranked
     }
 
-    pub fn fetch_user_rank(&mut self, connect_code: &str) -> Result<RankInfo, GetRankErrorKind> {
-        match execute_rank_query(&self.api_client, connect_code) {
-            Ok(value) => {
-                let rank_response: Result<RankInfoAPIResponse, serde_json::Error> = serde_json::from_str(&value);
-                match rank_response {
-                    Ok(rank_resp) => {
-                        let curr_rank = RankInfo { 
-                                rank: RankManager::get_rank(
-                                    rank_resp.rating_ordinal, 
-                                    rank_resp.daily_global_placement.unwrap_or_default(), 
-                                    rank_resp.daily_regional_placement.unwrap_or_default(),
-                                    rank_resp.rating_update_count
-                                ) as u8, 
-                                rating_ordinal: rank_resp.rating_ordinal, 
-                                global_placing: rank_resp.daily_global_placement.unwrap_or_default(), 
-                                regional_placing: rank_resp.daily_regional_placement.unwrap_or_default(), 
-                                rating_update_count: rank_resp.rating_update_count, 
-                            };
-                        // Save last response for getting rank / rating change later
-                        self.last_rank = Some(curr_rank.clone());
-                        Ok(curr_rank)
-                    },
-                    Err(_err) => Err(GetRankErrorKind::NotSuccessful("Failed to parse rank struct".to_owned())),
-                }
-            }
-            Err(err) => Err(err)
+ 
+}
+
+impl Drop for RankManager
+{
+    fn drop(&mut self) {
+        tracing::info!(target: Log::SlippiOnline, "Dropping Rank Fetcher");
+        if let Err(e) = self.tx.send(Message::RankFetcherDropped) {
+            tracing::warn!(
+                target: Log::SlippiOnline,
+                "Failed to notify child thread that Rank Fetcher is dropping: {e}"
+            );
         }
     }
 }

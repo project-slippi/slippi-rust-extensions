@@ -51,17 +51,6 @@ struct RustChatMessages {
   int len;
 };
 
-struct RustRankInfo {
-  unsigned char status;
-  unsigned char rank;
-  float rating_ordinal;
-  unsigned char global_placing;
-  unsigned char regional_placing;
-  unsigned int rating_update_count;
-  float rating_change;
-  int rank_change;
-};
-
 extern "C" {
 
 /// Creates and leaks a shadow EXI device with the provided configuration.
@@ -268,9 +257,6 @@ RustChatMessages *slprs_user_get_default_messages(uintptr_t exi_device_instance_
 void slprs_user_free_messages(RustChatMessages *ptr);
 
 /// Fetches the rank information of the user currently logged in.
-RustRankInfo *slprs_fetch_rank_info(uintptr_t exi_device_instance_ptr);
-
-/// Gets the cached rank information of the user currently logged in.
-void slprs_get_rank_info(uintptr_t exi_device_instance_ptr);
+void slprs_fetch_rank_info(uintptr_t exi_device_instance_ptr);
 
 } // extern "C"

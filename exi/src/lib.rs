@@ -50,7 +50,7 @@ impl SlippiEXIDevice {
 
         let game_reporter = GameReporter::new(api_client.clone(), user_manager.clone(), config.paths.iso.clone());
 
-        let rank_manager= RankManager::new(api_client.clone());
+        let rank_manager= RankManager::new(api_client.clone(), user_manager.clone());
 
         // Playback has no need to deal with this.
         // (We could maybe silo more?)
