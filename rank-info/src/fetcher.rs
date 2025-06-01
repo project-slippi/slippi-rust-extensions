@@ -8,6 +8,7 @@ use slippi_user::{UserInfo, UserManager};
 use slippi_gg_api::APIClient;
 use tracing::dispatcher::with_default;
 use crate::utils::RankManagerError;
+use crate::RankInfoResponseStatus;
 
 use super::{RankManager, RankManagerData, RankInfo, Message};
 
@@ -33,35 +34,114 @@ impl RankInfoFetcher {
     }
 
     pub fn fetch_user_rank(&self, connect_code: &str) -> Result<RankInfo, GetRankErrorKind> {
-        // TODO :: do logic for previous rank / rating here
         match execute_rank_query(&self.api_client, connect_code) {
             Ok(value) => {
                 let rank_response: Result<RankInfoAPIResponse, serde_json::Error> = serde_json::from_str(&value);
                 match rank_response {
                     Ok(rank_resp) => {
-                        let curr_rank = RankInfo {
-                                rank: RankManager::decide_rank(
+                        let mut rank_data = self.rank_data.lock().unwrap();
+                        rank_data.previous_rank = rank_data.current_rank.clone();
+
+                        let prev_rank_data = match rank_data.clone().previous_rank {
+                            Some(rank) => rank,
+                            None => RankInfo {
+                                resp_status: RankInfoResponseStatus::Success as u8,
+                                rank: 0,
+                                rating_ordinal: 0.0,
+                                global_placing: 0,
+                                regional_placing: 0,
+                                rating_update_count: 0,
+                                rank_change: 0,
+                                rating_change: 0.0
+                            }
+                        };
+                        tracing::info!(target: Log::SlippiOnline, "prev rank: {0}", prev_rank_data.rank);
+                        tracing::info!(target: Log::SlippiOnline, "prev rating: {0}", prev_rank_data.rating_ordinal);
+                        tracing::info!(target: Log::SlippiOnline, "prev update count: {0}", prev_rank_data.rating_update_count);
+
+                        // Determine if rank response has successfully pulled updated info,
+                        // or if we have pulled the same data and the match is unreported
+                        // let rating_updated= false;
+                        // let 
+                        // let resp_status = 
+                        //     if rank_resp.rating_ordinal == prev_rank_data.rating_ordinal && rank_resp.rating_update_count != prev_rank_data.rating_update_count {
+                        //         RankInfoResponseStatus::Unreported
+                        //     }
+                        //     else {
+                        //         RankInfoResponseStatus::Success
+                        //     };
+
+                        let has_cached_rating = prev_rank_data.rating_ordinal != 0.0;
+                        let has_cached_rank = prev_rank_data.rank != 0;
+
+                        let rating_change: f32 =
+                            if has_cached_rating { 
+                                rank_resp.rating_ordinal - prev_rank_data.rating_ordinal
+                            } else { 0.0 };
+
+                        let curr_rating_ordinal = 
+                            if !has_cached_rating { 
+                                rank_resp.rating_ordinal 
+                            } else { 
+                                prev_rank_data.rating_ordinal 
+                            };
+
+                        let curr_rank = 
+                            RankManager::decide_rank(
                                     rank_resp.rating_ordinal, 
                                     rank_resp.daily_global_placement.unwrap_or_default(), 
                                     rank_resp.daily_regional_placement.unwrap_or_default(),
                                     rank_resp.rating_update_count
-                                ) as u8, 
-                                rating_ordinal: rank_resp.rating_ordinal, 
-                                global_placing: rank_resp.daily_global_placement.unwrap_or_default(), 
-                                regional_placing: rank_resp.daily_regional_placement.unwrap_or_default(), 
-                                rating_update_count: rank_resp.rating_update_count, 
-                            };
-                        // TODO :: move old rank logic here instead
+                                ) as i8;
+
+                        let rank_change: i8 = 
+                            if has_cached_rank { 
+                                curr_rank - prev_rank_data.rank as i8
+                            } else { 0 };
+
+                        rank_data.current_rank = Some(RankInfo {
+                                resp_status: RankInfoResponseStatus::Success as u8,
+                                rank: (curr_rank - rank_change) as u8,
+                                rating_ordinal: curr_rating_ordinal,
+                                global_placing: match rank_resp.daily_regional_placement {
+                                    Some(global_placement) => global_placement,
+                                    None => 0
+                                },
+                                regional_placing: match rank_resp.daily_regional_placement {
+                                    Some(regional_placement) => regional_placement,
+                                    None => 0
+                                },
+                                rating_update_count: rank_resp.rating_update_count,
+                                rating_change: rating_change,
+                                rank_change: rank_change as i32
+                            });
 
                         // debug logs
-                        tracing::info!(target: Log::SlippiOnline, "rank: {0}", curr_rank.rank);
-                        tracing::info!(target: Log::SlippiOnline, "rating_ordinal: {0}", curr_rank.rating_ordinal);
-                        Ok(curr_rank)
+                        let test = rank_data.current_rank.clone().unwrap();
+                        tracing::info!(target: Log::SlippiOnline, "rank: {0}", test.rank);
+                        tracing::info!(target: Log::SlippiOnline, "rating_ordinal: {0}", test.rating_ordinal);
+                        tracing::info!(target: Log::SlippiOnline, "global_placing: {0}", test.global_placing);
+                        tracing::info!(target: Log::SlippiOnline, "regional_placing: {0}", test.regional_placing);
+                        tracing::info!(target: Log::SlippiOnline, "rating_update_count: {0}", test.rating_update_count);
+
+                        Ok(RankInfo {
+                            resp_status: RankInfoResponseStatus::Success as u8,
+                            rank: 0,
+                            rating_ordinal: 0.0,
+                            global_placing: 0,
+                            regional_placing: 0,
+                            rating_update_count: 0,
+                            rating_change: rating_change,
+                            rank_change: rank_change as i32
+                        })
                     },
                     Err(_err) => Err(GetRankErrorKind::NotSuccessful("Failed to parse rank struct".to_owned())),
                 }
             }
-            Err(err) => Err(err)
+            Err(err) => {
+
+                Err(err)
+            }
         }
     }
 }
@@ -73,10 +153,8 @@ pub fn run(
     loop {
         match receiver.recv() {
             Ok(Message::FetchRank) => {
-                fetcher.user_manager.get(|user| {
-                    tracing::info!(target: Log::SlippiOnline, "Fetching rank info");
-                    fetcher.fetch_user_rank(&user.connect_code);
-                });
+                let connect_code = fetcher.user_manager.get(|user| user.connect_code.clone());
+                fetcher.fetch_user_rank(&connect_code);
             },
 
             Ok(Message::RankFetcherDropped) => {

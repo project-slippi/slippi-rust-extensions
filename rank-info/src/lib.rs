@@ -52,11 +52,14 @@ pub enum SlippiRank {
 
 #[derive(Debug, Clone, Default)]
 pub struct RankInfo {
+    pub resp_status: u8,
     pub rank: u8,
     pub rating_ordinal: f32,
     pub global_placing: u8,
     pub regional_placing: u8,
     pub rating_update_count: u32,
+    pub rating_change: f32,
+    pub rank_change: i32
 }
 
 #[derive(Debug)]
@@ -79,6 +82,7 @@ pub struct RankManager {
 
 impl RankManager {
     pub fn new(api_client: APIClient, user_manager: UserManager) -> Self {
+        tracing::info!(target: Log::SlippiOnline, "Initializing Slippi Rank Manager");
         let (tx, rx) = channel::<Message>();
         let rank_data = Arc::new(Mutex::new(RankManagerData::default()));
 
@@ -87,6 +91,10 @@ impl RankManager {
             user_manager.clone(),
             rank_data.clone(),
         );
+
+        // Fetch rank on boot (this doesnt work, this is when dolphin opens there is no user)
+        let connect_code = user_manager.get(|user| user.connect_code.clone());
+        fetcher.fetch_user_rank(&connect_code);
         
         let fetcher_thread = thread::Builder::new()
             .name("RankInfoFetcherThread".into())
