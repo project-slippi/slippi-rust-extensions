@@ -49,7 +49,7 @@ pub(crate) fn get_iso_kind(iso: &mut File) -> Result<IsoKind> {
 /// let get_true_offset = create_offset_locator_fn(&mut iso)?;
 /// let offset = get_true_offset(0x424);
 /// ```
-pub(crate) fn create_offset_locator_fn(iso: &mut File) -> Result<impl Fn(u64) -> Option<u64>> {
+pub(crate) fn create_offset_locator_fn(iso: &mut File) -> Result<impl Fn(u64) -> Option<u64> + use<>> {
     // Get the ciso header (block size and block map) of the provided file.
     // If the file is not a ciso, this will be `None`
     let ciso_header = ciso::get_ciso_header(iso)?;

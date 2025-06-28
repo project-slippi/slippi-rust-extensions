@@ -43,7 +43,7 @@ pub struct SlippiRustEXIConfig {
 /// down (at whatever point) via the corresponding `slprs_exi_device_destroy` function.
 ///
 /// The returned pointer from this should *not* be used after calling `slprs_exi_device_destroy`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_exi_device_create(config: SlippiRustEXIConfig) -> usize {
     dolphin_integrations::ffi::osd::set_global_hook(config.osd_add_msg_fn);
 
@@ -73,7 +73,7 @@ pub extern "C" fn slprs_exi_device_create(config: SlippiRustEXIConfig) -> usize 
 
 /// The C++ (Dolphin) side of things should call this to notify the Rust side that it
 /// can safely shut down and clean up.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_exi_device_destroy(exi_device_instance_ptr: usize) {
     tracing::warn!(
         target: Log::SlippiOnline,
@@ -94,7 +94,7 @@ pub extern "C" fn slprs_exi_device_destroy(exi_device_instance_ptr: usize) {
 /// the Dolphin side, corresponding to:
 ///
 /// `virtual void DMAWrite(u32 _uAddr, u32 _uSize);`
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_exi_device_dma_write(exi_device_instance_ptr: usize, address: *const u8, size: *const u8) {
     // Coerce the instance back from the pointer. This is theoretically safe since we control
     // the C++ side and can guarantee that the `exi_device_instance_ptr` pointer is only owned
@@ -111,7 +111,7 @@ pub extern "C" fn slprs_exi_device_dma_write(exi_device_instance_ptr: usize, add
 /// the Dolphin side, corresponding to:
 ///
 /// `virtual void DMARead(u32 _uAddr, u32 _uSize);`
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_exi_device_dma_read(exi_device_instance_ptr: usize, address: *const u8, size: *const u8) {
     // Coerce the instance from the pointer. This is theoretically safe since we control
     // the C++ side and can guarantee that the `exi_device_instance_ptr` pointer is only owned
@@ -129,7 +129,7 @@ pub extern "C" fn slprs_exi_device_dma_read(exi_device_instance_ptr: usize, addr
 /// will then add it to the processing pipeline.
 ///
 /// The reporter will manage the actual... reporting.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_exi_device_log_game_report(instance_ptr: usize, game_report_instance_ptr: usize) {
     // Coerce the instances from the pointers. This is theoretically safe since we control
     // the C++ side and can guarantee that the pointers are only owned
@@ -148,7 +148,7 @@ pub extern "C" fn slprs_exi_device_log_game_report(instance_ptr: usize, game_rep
 }
 
 /// Calls through to `SlippiGameReporter::start_new_session`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_exi_device_start_new_reporter_session(instance_ptr: usize) {
     // Coerce the instances from the pointers. This is theoretically safe since we control
     // the C++ side and can guarantee that the pointers are only owned
@@ -163,7 +163,7 @@ pub extern "C" fn slprs_exi_device_start_new_reporter_session(instance_ptr: usiz
 
 /// Calls through to the `SlippiGameReporter` on the EXI device to report a
 /// match completion event.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_exi_device_report_match_completion(instance_ptr: usize, match_id: *const c_char, end_mode: u8) {
     // Coerce the instances from the pointers. This is theoretically safe since we control
     // the C++ side and can guarantee that the pointers are only owned
@@ -181,7 +181,7 @@ pub extern "C" fn slprs_exi_device_report_match_completion(instance_ptr: usize, 
 
 /// Calls through to the `SlippiGameReporter` on the EXI device to report a
 /// match abandon event.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_exi_device_report_match_abandonment(instance_ptr: usize, match_id: *const c_char) {
     // Coerce the instances from the pointers. This is theoretically safe since we control
     // the C++ side and can guarantee that the pointers are only owned
@@ -198,7 +198,7 @@ pub extern "C" fn slprs_exi_device_report_match_abandonment(instance_ptr: usize,
 }
 
 /// Calls through to `SlippiGameReporter::push_replay_data`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_exi_device_reporter_push_replay_data(instance_ptr: usize, data: *const u8, length: u32) {
     // Convert our pointer to a Rust slice so that the game reporter
     // doesn't need to deal with anything C-ish.
@@ -218,7 +218,7 @@ pub extern "C" fn slprs_exi_device_reporter_push_replay_data(instance_ptr: usize
 /// Configures the Jukebox process. This needs to be called after the EXI device is created
 /// in order for certain pieces of Dolphin to be properly initalized; this may change down
 /// the road though and is not set in stone.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_exi_device_configure_jukebox(
     exi_device_instance_ptr: usize,
     is_enabled: bool,

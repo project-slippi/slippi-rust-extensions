@@ -86,7 +86,9 @@ pub fn init(logger_fn: ForeignLoggerFn) {
     // know if something else, somehow, registered before us.
     LOGGER.call_once(|| {
         // We do this so that full backtrace's are emitted on any crashes.
-        std::env::set_var("RUST_BACKTRACE", "full");
+        unsafe {
+            std::env::set_var("RUST_BACKTRACE", "full");
+        }
 
         tracing_subscriber::registry().with(DolphinLoggerLayer::new(logger_fn)).init();
     });
