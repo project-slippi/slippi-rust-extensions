@@ -7,14 +7,14 @@
 //!
 //! Ultimately this should mean no log fragmentation or confusion.
 
-use std::ffi::{c_char, c_int, CStr};
+use std::ffi::{CStr, c_char, c_int};
 use std::sync::{Arc, Once, OnceLock, RwLock};
 
 use tracing::Level;
 use tracing_subscriber::prelude::*;
 
 mod layer;
-use layer::{convert_dolphin_log_level_to_tracing_level, DolphinLoggerLayer};
+use layer::{DolphinLoggerLayer, convert_dolphin_log_level_to_tracing_level};
 
 /// A type that mirrors a function over on the C++ side; because the library exists as
 /// a dylib, it can't depend on any functions from the host application - but we _can_

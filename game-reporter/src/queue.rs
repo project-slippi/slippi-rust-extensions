@@ -7,9 +7,9 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use flate2::write::GzEncoder;
 use flate2::Compression;
-use serde_json::{json, Value};
+use flate2::write::GzEncoder;
+use serde_json::{Value, json};
 
 use dolphin_integrations::{Color, Dolphin, Duration as OSDDuration, Log};
 use slippi_gg_api::APIClient;
