@@ -263,7 +263,7 @@ fn process_reports(queue: &GameReporterQueue, event: ProcessingEvent) {
 }
 
 /// The true inner error, minus any metadata.
-/// the compiler thinks these are unused, but they're not.
+/// the compiler thinks the fields are unused, but they're not.
 /// debug impls will render them over the Dolphin logging interface
 /// and the compiler just doesn't see that.
 #[derive(Debug)]
