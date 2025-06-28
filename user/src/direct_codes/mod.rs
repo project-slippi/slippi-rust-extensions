@@ -83,7 +83,7 @@ impl DirectCodes {
     fn sort(codes: &mut Vec<DirectCode>, sort_by: SortBy) {
         match sort_by {
             SortBy::LastPlayed => {
-                codes.sort_by(|a, b| a.last_played.cmp(&b.last_played));
+                codes.sort_by(|a, b| b.last_played.cmp(&a.last_played));
             },
         }
     }
