@@ -263,12 +263,18 @@ fn process_reports(queue: &GameReporterQueue, event: ProcessingEvent) {
 }
 
 /// The true inner error, minus any metadata.
-#[allow(dead_code)]
+/// the compiler thinks these are unused, but they're not.
+/// debug impls will render them over the Dolphin logging interface
+/// and the compiler just doesn't see that.
 #[derive(Debug)]
 enum ReportSendErrorKind {
+    #[allow(dead_code)]
     Net(slippi_gg_api::Error),
+    #[allow(dead_code)]
     JSON(serde_json::Error),
+    #[allow(dead_code)]
     GraphQL(String),
+    #[allow(dead_code)]
     NotSuccessful(String),
 }
 
