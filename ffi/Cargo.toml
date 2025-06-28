@@ -14,7 +14,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [build-dependencies]
-cbindgen = "0.24.3"
+cbindgen = "0.29.0"
 
 [features]
 default = ["ishiiruka"]
