@@ -1,11 +1,12 @@
 use std::convert::TryInto;
 use std::fmt::Debug;
 use std::fs::File;
+
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use dolphin_integrations::{Color, Dolphin, Duration as OSDDuration, Log};
 use hps_decode::Hps;
-use rodio::{OutputStream, Sink};
+use rodio::{OutputStream, Sink, Source};
 
 use crate::Message::*;
 
@@ -17,7 +18,7 @@ mod disc;
 use disc::{get_iso_kind, IsoKind};
 
 mod utils;
-use utils::copy_bytes_from_file;
+use utils::{copy_bytes_from_file, TrackList};
 
 pub(crate) type Result<T> = std::result::Result<T, JukeboxError>;
 
@@ -49,7 +50,12 @@ pub struct Jukebox {
 impl Jukebox {
     /// Returns an instance of Slippi Jukebox. Playback can be controlled by
     /// calling the instance's public methods.
-    pub fn new(iso_path: String, initial_dolphin_system_volume: u8, initial_dolphin_music_volume: u8) -> Result<Self> {
+    pub fn new(
+        iso_path: String,
+        jukebox_path: String,
+        initial_dolphin_system_volume: u8,
+        initial_dolphin_music_volume: u8,
+    ) -> Result<Self> {
         tracing::info!(target: Log::Jukebox, "Initializing Slippi Jukebox");
 
         // Make sure the provided ISO is supported
@@ -70,7 +76,13 @@ impl Jukebox {
         std::thread::Builder::new()
             .name("SlippiJukebox".to_string())
             .spawn(move || {
-                if let Err(e) = Self::start(rx, iso_path, initial_dolphin_system_volume, initial_dolphin_music_volume) {
+                if let Err(e) = Self::start(
+                    rx,
+                    iso_path,
+                    jukebox_path,
+                    initial_dolphin_system_volume,
+                    initial_dolphin_music_volume,
+                ) {
                     tracing::error!(
                         target: Log::Jukebox,
                         error = ?e,
@@ -89,6 +101,7 @@ impl Jukebox {
     fn start(
         rx: Receiver<Message>,
         iso_path: String,
+        jukebox_path: String,
         initial_dolphin_system_volume: u8,
         initial_dolphin_music_volume: u8,
     ) -> Result<()> {
@@ -97,6 +110,8 @@ impl Jukebox {
 
         let mut iso = File::open(&iso_path)?;
         let get_real_offset = disc::create_offset_locator_fn(&mut iso)?;
+
+        let track_list = TrackList::new(&mut iso, jukebox_path.into());
 
         let mut melee_music_volume = 1.0;
         let mut dolphin_system_volume = (initial_dolphin_system_volume as f32 / 100.0).clamp(0.0, 1.0);
@@ -122,31 +137,37 @@ impl Jukebox {
                         },
                     };
 
-                    // Parse the bytes as an Hps
-                    let hps: Hps = match copy_bytes_from_file(&mut iso, real_hps_offset, hps_length)?.try_into() {
-                        Ok(hps) => hps,
-                        Err(e) => {
-                            tracing::error!(target: Log::Jukebox, error = ?e, "Failed to parse bytes into an Hps. Cannot play song.");
-                            continue;
-                        },
-                    };
+                    // Append stage audio to sink
+                    if let Some(custom_song) = track_list
+                        .as_ref()
+                        .and_then(|track_list| track_list.find_custom_song(hps_offset))
+                    {
+                        sink.append(custom_song.repeat_infinite());
+                    } else {
+                        // Parse the bytes as an Hps
+                        let hps: Hps = match copy_bytes_from_file(&mut iso, real_hps_offset, hps_length)?.try_into() {
+                            Ok(hps) => hps,
+                            Err(e) => {
+                                tracing::error!(target: Log::Jukebox, error = ?e, "Failed to parse bytes into an Hps. Cannot play song.");
+                                continue;
+                            },
+                        };
+                        // Decode the Hps into audio
+                        let audio = match hps.decode() {
+                            Ok(audio) => audio,
+                            Err(e) => {
+                                tracing::error!(target: Log::Jukebox, error = ?e, "Failed to decode hps into audio. Cannot play song.");
+                                Dolphin::add_osd_message(
+                                    Color::Red,
+                                    OSDDuration::Normal,
+                                    "Invalid music data found in ISO. This music will not play.",
+                                );
+                                continue;
+                            },
+                        };
+                        sink.append(audio);
+                    }
 
-                    // Decode the Hps into audio
-                    let audio = match hps.decode() {
-                        Ok(audio) => audio,
-                        Err(e) => {
-                            tracing::error!(target: Log::Jukebox, error = ?e, "Failed to decode hps into audio. Cannot play song.");
-                            Dolphin::add_osd_message(
-                                Color::Red,
-                                OSDDuration::Normal,
-                                "Invalid music data found in ISO. This music will not play.",
-                            );
-                            continue;
-                        },
-                    };
-
-                    // Play the song
-                    sink.append(audio);
                     sink.play();
                 },
                 SetVolume(control, volume) => {
