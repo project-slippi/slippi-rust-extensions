@@ -96,6 +96,7 @@ impl Jukebox {
         let sink = Sink::try_new(&stream_handle)?;
 
         let mut iso = File::open(&iso_path)?;
+        let mut iso_hps = File::open(&iso_path)?;
         let get_real_offset = disc::create_offset_locator_fn(&mut iso)?;
 
         let mut melee_music_volume = 1.0;
@@ -123,13 +124,6 @@ impl Jukebox {
                     };
 
                     // Parse the bytes as an Hps
-                    let mut iso_hps = match iso.try_clone() {
-                        Ok(iso) => iso,
-                        Err(e) => {
-                            tracing::error!(target: Log::Jukebox, error = ?e, "Failed to clone iso before reading bytes. Cannot play song.");
-                            continue;
-                        },
-                    };
                     let hps: Hps = match copy_bytes_from_file(&mut iso_hps, real_hps_offset, hps_length)?.try_into() {
                         Ok(hps) => hps,
                         Err(e) => {
