@@ -263,6 +263,7 @@ fn process_reports(queue: &GameReporterQueue, event: ProcessingEvent) {
 }
 
 /// The true inner error, minus any metadata.
+#[allow(dead_code)]
 #[derive(Debug)]
 enum ReportSendErrorKind {
     Net(slippi_gg_api::Error),
