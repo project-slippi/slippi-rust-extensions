@@ -65,7 +65,7 @@ impl OffsetLocator {
     pub fn get_real_offset(&self, offset: u64) -> Option<u64> {
         match &self.0 {
             Some(ciso_header) => ciso::get_ciso_offset(ciso_header, offset),
-            None => Some(offset)
+            None => Some(offset),
         }
     }
 }
