@@ -1181,6 +1181,7 @@ dependencies = [
  "serde",
  "serde_json",
  "slippi-gg-api",
+ "time",
  "tracing",
 ]
 
@@ -1195,19 +1196,6 @@ dependencies = [
  "slippi-jukebox",
  "slippi-user",
  "tracing",
-]
-
-[[package]]
-name = "slippi-user"
-version = "0.1.0"
-dependencies = [
- "dolphin-integrations",
- "open",
- "serde",
- "serde_json",
- "time",
- "tracing",
- "ureq",
 ]
 
 [[package]]
