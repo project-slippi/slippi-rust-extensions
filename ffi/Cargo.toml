@@ -7,14 +7,14 @@ authors = [
     "Ryan McGrath <ryan@rymc.io>"
 ]
 repository = ""
-edition = "2021"
+edition = "2024"
 publish = false
 
 [lib]
 crate-type = ["cdylib"]
 
 [build-dependencies]
-cbindgen = "0.24.3"
+cbindgen = "0.29.0"
 
 [features]
 default = ["ishiiruka"]

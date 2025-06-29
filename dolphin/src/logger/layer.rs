@@ -9,7 +9,7 @@ use time::OffsetDateTime;
 use tracing::{Level, Metadata};
 use tracing_subscriber::Layer;
 
-use super::{ForeignLoggerFn, Log, LOG_CONTAINERS};
+use super::{ForeignLoggerFn, LOG_CONTAINERS, Log};
 
 /// Corresponds to Dolphin's `LogTypes::LOG_LEVELS::LNOTICE` value.
 #[allow(dead_code)]

@@ -7,7 +7,7 @@ authors = [
     "Ryan McGrath <ryan@rymc.io>"
 ]
 repository = ""
-edition = "2021"
+edition = "2024"
 publish = false
 
 [dependencies]

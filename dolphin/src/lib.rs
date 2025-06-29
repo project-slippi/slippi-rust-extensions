@@ -3,7 +3,7 @@
 //! Typically you can just import the `Dolphin` struct and use that as a namespace for accessing
 //! all functionality at once.
 
-use std::ffi::{c_char, CString};
+use std::ffi::{CString, c_char};
 
 mod logger;
 pub use logger::Log;

@@ -8,8 +8,8 @@
 //! unix timestamp handling code.
 
 use serde::{Deserialize, Serialize};
-use time::macros::format_description;
 use time::OffsetDateTime;
+use time::macros::format_description;
 
 /// Serializes a timestamp as a unix timestamp (`i64`).
 pub fn serialize<S>(datetime: &OffsetDateTime, serializer: S) -> Result<S::Ok, S::Error>

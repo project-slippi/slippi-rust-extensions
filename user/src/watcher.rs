@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use slippi_gg_api::APIClient;
 
-use super::{attempt_login, UserInfo};
+use super::{UserInfo, attempt_login};
 
 /// This type manages access to user information, as well as any background thread watching
 /// for `user.json` file existence.
@@ -50,16 +50,18 @@ impl UserInfoWatcher {
 
         let watcher_thread = thread::Builder::new()
             .name("SlippiUserJSONWatcherThread".into())
-            .spawn(move || loop {
-                if !should_watch.load(Ordering::Relaxed) {
-                    return;
-                }
+            .spawn(move || {
+                loop {
+                    if !should_watch.load(Ordering::Relaxed) {
+                        return;
+                    }
 
-                if attempt_login(&api_client, &user, &user_json_path, &slippi_semver) {
-                    return;
-                }
+                    if attempt_login(&api_client, &user, &user_json_path, &slippi_semver) {
+                        return;
+                    }
 
-                thread::sleep(Duration::from_millis(500));
+                    thread::sleep(Duration::from_millis(500));
+                }
             })
             .expect("Failed to spawn SlippiUserJSONWatcherThread");
 

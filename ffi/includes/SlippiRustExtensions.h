@@ -377,5 +377,5 @@ char *slprs_user_direct_codes_get_code_at_index(uintptr_t exi_device_instance_pt
 void slprs_user_direct_codes_free_code(char *code);
 
 #ifdef __cplusplus
-} // extern "C"
-#endif // __cplusplus
+}  // extern "C"
+#endif  // __cplusplus

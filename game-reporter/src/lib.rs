@@ -2,9 +2,9 @@
 //! not to rewrite the universe.
 
 use std::ops::Deref;
-use std::sync::mpsc::{self, Sender};
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::mpsc::{self, Sender};
 use std::thread;
 
 use dolphin_integrations::Log;

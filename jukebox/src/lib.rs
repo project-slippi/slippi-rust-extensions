@@ -1,7 +1,7 @@
 use std::convert::TryInto;
 use std::fmt::Debug;
 use std::fs::File;
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender, channel};
 
 use dolphin_integrations::{Color, Dolphin, Duration as OSDDuration, Log};
 use hps_decode::Hps;
@@ -10,11 +10,11 @@ use rodio::{OutputStream, Sink};
 use crate::Message::*;
 
 mod errors;
-pub use errors::JukeboxError;
 use JukeboxError::*;
+pub use errors::JukeboxError;
 
 mod disc;
-use disc::{get_iso_kind, IsoKind};
+use disc::{IsoKind, get_iso_kind};
 
 mod utils;
 use utils::copy_bytes_from_file;

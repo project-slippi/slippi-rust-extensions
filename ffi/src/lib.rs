@@ -5,7 +5,7 @@
 //! This library auto-generates C headers on build, and Slippi Dolphin is pre-configured
 //! to locate these headers and link the entire dylib.
 
-use std::ffi::{c_char, CStr};
+use std::ffi::{CStr, c_char};
 
 use dolphin_integrations::Log;
 
