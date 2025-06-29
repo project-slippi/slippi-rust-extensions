@@ -8,7 +8,7 @@ const CISO_HEADER_SIZE: usize = 0x8000;
 const CISO_BLOCK_MAP_SIZE: usize = CISO_HEADER_SIZE - 0x8;
 
 // (Block Size, Block Map)
-pub type CisoHeader = (u32, [u8; CISO_BLOCK_MAP_SIZE]);
+type CisoHeader = (u32, [u8; CISO_BLOCK_MAP_SIZE]);
 
 /// Get the header of a ciso disc image. If the provided file is not a ciso,
 /// `None` will be returned
