@@ -51,7 +51,7 @@ pub(crate) fn get_iso_kind(iso: &mut File) -> Result<IsoKind> {
 /// ```
 ///
 /// Technical note:
-/// The returned function does not capture any lifetimes which is why it is
+/// The returned function does not capture any references which is why it is
 /// marked as 'static. This must be explicit in the 2024 edition:
 /// https://blog.rust-lang.org/2024/09/05/impl-trait-capture-rules/
 pub(crate) fn create_offset_locator_fn(iso: &mut File) -> Result<impl Fn(u64) -> Option<u64> + 'static> {
