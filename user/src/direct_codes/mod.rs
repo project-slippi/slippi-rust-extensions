@@ -132,7 +132,7 @@ impl DirectCodes {
         let mut codes = self.codes.lock().expect("Unable to lock codes for autocomplete");
 
         let mut found = false;
-        for mut entry in codes.iter_mut() {
+        for entry in codes.iter_mut() {
             if entry.connect_code == code {
                 found = true;
                 entry.last_played = last_played;

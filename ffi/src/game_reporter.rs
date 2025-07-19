@@ -25,7 +25,7 @@ pub enum SlippiMatchmakingOnlinePlayMode {
 /// Creates a new Player Report and leaks it, returning the pointer.
 ///
 /// This should be passed on to a GameReport for processing.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_player_report_create(
     uid: *const c_char,
     slot_type: u8,
@@ -59,7 +59,7 @@ pub extern "C" fn slprs_player_report_create(
 ///
 /// This is expected to ultimately be passed to the game reporter, which will handle
 /// destruction and cleanup.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_game_report_create(
     uid: *const c_char,
     play_key: *const c_char,
@@ -109,7 +109,7 @@ pub extern "C" fn slprs_game_report_create(
 
 /// Takes ownership of the `PlayerReport` at the specified pointer, adding it to the
 /// `GameReport` at the corresponding pointer.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_game_report_add_player_report(instance_ptr: usize, player_report_instance_ptr: usize) {
     // Coerce the instance from the pointer. This is theoretically safe since we control
     // the C++ side and can guarantee that the `game_report_instance_ptr` is only owned
