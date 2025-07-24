@@ -168,7 +168,7 @@ pub extern "C" fn slprs_exi_device_report_match_status(
     instance_ptr: usize,
     match_id: *const c_char,
     status: *const c_char,
-    asynchronous: bool,
+    background: bool,
 ) {
     // Coerce the instances from the pointers. This is theoretically safe since we control
     // the C++ side and can guarantee that the pointers are only owned
@@ -179,7 +179,7 @@ pub extern "C" fn slprs_exi_device_report_match_status(
     let match_id = c_str_to_string(match_id, fn_name, "match_id");
     let status = c_str_to_string(status, fn_name, "status");
 
-    device.game_reporter.report_match_status(match_id, status, asynchronous);
+    device.game_reporter.report_match_status(match_id, status, background);
 
     // Fall back into a raw pointer so Rust doesn't obliterate the object.
     let _leak = Box::into_raw(device);

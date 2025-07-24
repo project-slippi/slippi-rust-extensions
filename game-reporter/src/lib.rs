@@ -148,11 +148,11 @@ impl GameReporter {
         }
     }
 
-    pub fn report_match_status(&self, match_id: String, status: String, asynchronous: bool) {
+    pub fn report_match_status(&self, match_id: String, status: String, background: bool) {
         let (uid, play_key) = self.user_manager.get(|user| (user.uid.clone(), user.play_key.clone()));
 
         // If synchronous, call directly
-        if !asynchronous {
+        if !background {
             queue::report_match_status(
                 &self.queue.api_client,
                 uid.clone(),
@@ -163,7 +163,7 @@ impl GameReporter {
             return;
         }
 
-        // If asynchronous, send to the processing thread
+        // If background, send to the processing thread
         let event = StatusReportEvent::ReportAvailable {
             uid,
             play_key,

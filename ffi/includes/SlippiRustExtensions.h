@@ -132,7 +132,7 @@ void slprs_exi_device_start_new_reporter_session(uintptr_t instance_ptr);
 void slprs_exi_device_report_match_status(uintptr_t instance_ptr,
                                           const char *match_id,
                                           const char *status,
-                                          bool asynchronous);
+                                          bool background);
 
 /**
  * Calls through to `SlippiGameReporter::push_replay_data`.
