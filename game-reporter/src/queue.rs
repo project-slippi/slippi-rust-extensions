@@ -15,7 +15,7 @@ use dolphin_integrations::{Color, Dolphin, Duration as OSDDuration, Log};
 use slippi_gg_api::APIClient;
 
 use crate::types::{GameReport, GameReportRequestPayload, OnlinePlayMode};
-use crate::{CompletionEvent, ProcessingEvent};
+use crate::{ProcessingEvent, StatusReportEvent};
 
 const GRAPHQL_URL: &str = "https://internal.slippi.gg/graphql";
 
@@ -69,53 +69,23 @@ impl GameReporterQueue {
             },
         }
     }
-
-    /// Report an abandoned match.
-    ///
-    /// This doesn't necessarily need to be here, but it's easier to grok the codebase
-    /// if we keep all reporting network calls in one module.
-    pub fn report_abandonment(&self, uid: String, play_key: String, match_id: String) {
-        let mutation = r#"
-            mutation ($report: OnlineGameAbandonInput!) {
-                abandonOnlineGame (report: $report)
-            }
-        "#;
-
-        let variables = Some(json!({
-            "report": {
-                "matchId": match_id,
-                "fbUid": uid,
-                "playKey": play_key,
-            }
-        }));
-
-        let res = execute_graphql_query(&self.api_client, mutation, variables, Some("abandonOnlineGame"));
-
-        match res {
-            Ok(value) if value == "true" => {
-                tracing::info!(target: Log::SlippiOnline, "Successfully executed abandonment request")
-            },
-            Ok(value) => tracing::error!(target: Log::SlippiOnline, ?value, "Error executing abandonment request",),
-            Err(error) => tracing::error!(target: Log::SlippiOnline, ?error, "Error executing abandonment request"),
-        }
-    }
 }
 
-pub(crate) fn run_completion(api_client: APIClient, receiver: Receiver<CompletionEvent>) {
+pub(crate) fn run_report_match_status(api_client: APIClient, receiver: Receiver<StatusReportEvent>) {
     loop {
         // Watch for notification to do work
         match receiver.recv() {
-            Ok(CompletionEvent::ReportAvailable {
+            Ok(StatusReportEvent::ReportAvailable {
                 uid,
                 play_key,
                 match_id,
-                end_mode,
+                status,
             }) => {
-                report_completion(&api_client, uid, match_id, play_key, end_mode);
+                report_match_status(&api_client, uid, match_id, play_key, status);
             },
 
-            Ok(CompletionEvent::Shutdown) => {
-                tracing::info!(target: Log::SlippiOnline, "Completion thread winding down");
+            Ok(StatusReportEvent::Shutdown) => {
+                tracing::info!(target: Log::SlippiOnline, "Status report thread winding down");
                 break;
             },
 
@@ -126,7 +96,7 @@ pub(crate) fn run_completion(api_client: APIClient, receiver: Receiver<Completio
                 tracing::error!(
                     target: Log::SlippiOnline,
                     ?error,
-                    "Failed to receive CompletionEvent, thread will exit"
+                    "Failed to receive StatusReportEvent, thread will exit"
                 );
 
                 break;
@@ -135,14 +105,14 @@ pub(crate) fn run_completion(api_client: APIClient, receiver: Receiver<Completio
     }
 }
 
-/// Report a completed match.
+/// Report a match status update.
 ///
 /// This doesn't necessarily need to be here, but it's easier to grok the codebase
 /// if we keep all reporting network calls in one module.
-pub fn report_completion(api_client: &APIClient, uid: String, match_id: String, play_key: String, end_mode: u8) {
+pub fn report_match_status(api_client: &APIClient, uid: String, match_id: String, play_key: String, status: String) {
     let mutation = r#"
-        mutation ($report: OnlineGameCompleteInput!) {
-            completeOnlineGame (report: $report)
+        mutation ($report: OnlineMatchStatusReportInput!) {
+            reportOnlineMatchStatus (report: $report)
         }
     "#;
 
@@ -151,18 +121,18 @@ pub fn report_completion(api_client: &APIClient, uid: String, match_id: String, 
             "matchId": match_id,
             "fbUid": uid,
             "playKey": play_key,
-            "endMode": end_mode,
+            "status": status,
         }
     }));
 
-    let res = execute_graphql_query(api_client, mutation, variables, Some("completeOnlineGame"));
+    let res = execute_graphql_query(api_client, mutation, variables, Some("reportOnlineMatchStatus"));
 
     match res {
         Ok(value) if value == "true" => {
-            tracing::info!(target: Log::SlippiOnline, "Successfully executed completion request")
+            tracing::info!(target: Log::SlippiOnline, "Successfully executed status report request")
         },
-        Ok(value) => tracing::error!(target: Log::SlippiOnline, ?value, "Error executing completion request",),
-        Err(error) => tracing::error!(target: Log::SlippiOnline, ?error, "Error executing completion request"),
+        Ok(value) => tracing::error!(target: Log::SlippiOnline, ?value, "Error executing status report request",),
+        Err(error) => tracing::error!(target: Log::SlippiOnline, ?error, "Error executing status report request"),
     }
 }
 
