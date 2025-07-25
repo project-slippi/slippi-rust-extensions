@@ -8,8 +8,8 @@
 //! unix timestamp handling code.
 
 use serde::{Deserialize, Serialize};
-use time::{Date, OffsetDateTime, Time};
 use time::macros::format_description;
+use time::{Date, OffsetDateTime, Time};
 
 /// Serializes a timestamp as a unix timestamp (`i64`).
 pub fn serialize<S>(datetime: &OffsetDateTime, serializer: S) -> Result<S::Ok, S::Error>
@@ -49,7 +49,7 @@ where
         if split.len() == 2 {
             let date_fmt = format_description!("[year][month][day]");
             let date = Date::parse(&split[0], &date_fmt).map_err(serde::de::Error::custom)?;
-            
+
             let time_fmt = format_description!("[offset_hour][offset_minute][offset_second]");
             let time = Time::parse(&split[1], &time_fmt).map_err(serde::de::Error::custom)?;
 
