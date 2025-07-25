@@ -8,7 +8,7 @@
 //! unix timestamp handling code.
 
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
+use time::{Date, OffsetDateTime, Time};
 use time::macros::format_description;
 
 /// Serializes a timestamp as a unix timestamp (`i64`).
@@ -31,10 +31,30 @@ where
         return OffsetDateTime::from_unix_timestamp(timestamp).map_err(serde::de::Error::custom);
     }
 
+    // This splits old timestamps (e.g: "20230323T181928") and parses date and time separately
+    // then combines them back into an OffsetDateTime. It is an unfortunate workaround to the
+    // time crate using some completely custom format that attempts to be better than the strftime
+    // utilities that everything else uses, along with having woeful documentation on how to parse
+    // out custom datetime strings.
+    //
+    // (Using a format of "[year][month][day]T[offset_hour][offset_minute][offset_second]" produces
+    // an error informing that there's insufficient information to parse, and there's nothing
+    // further to debug past there. This code is something that will get ripped out in the future
+    // anyway after enough time for people to be migrated to the unix timestamp format.)
+    //
+    // (Read: I should have just used chrono/jiff. I don't have bandwidth to migrate things atm.)
     if let Some(datetime_str) = value.as_str() {
-        let tsfmt = format_description!("[year][month][day]T[offset_hour][offset_minute][offset_second]");
+        let split: Vec<&str> = datetime_str.split("T").collect();
 
-        return OffsetDateTime::parse(datetime_str, &tsfmt).map_err(serde::de::Error::custom);
+        if split.len() == 2 {
+            let date_fmt = format_description!("[year][month][day]");
+            let date = Date::parse(&split[0], &date_fmt).map_err(serde::de::Error::custom)?;
+            
+            let time_fmt = format_description!("[offset_hour][offset_minute][offset_second]");
+            let time = Time::parse(&split[1], &time_fmt).map_err(serde::de::Error::custom)?;
+
+            return Ok(OffsetDateTime::new_utc(date, time));
+        }
     }
 
     Err(serde::de::Error::custom(format!(
