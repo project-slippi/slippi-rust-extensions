@@ -129,10 +129,10 @@ pub fn report_match_status(api_client: &APIClient, uid: String, match_id: String
 
     match res {
         Ok(value) if value == "true" => {
-            tracing::info!(target: Log::SlippiOnline, "Successfully executed status report request")
+            tracing::info!(target: Log::SlippiOnline, "Successfully executed status report request: {status}")
         },
-        Ok(value) => tracing::error!(target: Log::SlippiOnline, ?value, "Error executing status report request",),
-        Err(error) => tracing::error!(target: Log::SlippiOnline, ?error, "Error executing status report request"),
+        Ok(value) => tracing::error!(target: Log::SlippiOnline, ?value, "Error executing status report request: {status}"),
+        Err(error) => tracing::error!(target: Log::SlippiOnline, ?error, "Error executing status report request: {status}"),
     }
 }
 
