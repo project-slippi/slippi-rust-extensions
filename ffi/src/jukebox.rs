@@ -2,7 +2,7 @@ use slippi_exi_device::SlippiEXIDevice;
 use slippi_jukebox::VolumeControl;
 
 /// Calls through to `Jukebox::start_song`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_jukebox_start_song(exi_device_instance_ptr: usize, hps_offset: u64, hps_length: usize) {
     // Coerce the instance from the pointer. This is theoretically safe since we control
     // the C++ side and can guarantee that the `exi_device_instance_ptr` is only owned
@@ -18,7 +18,7 @@ pub extern "C" fn slprs_jukebox_start_song(exi_device_instance_ptr: usize, hps_o
 }
 
 /// Calls through to `Jukebox::stop_music`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_jukebox_stop_music(exi_device_instance_ptr: usize) {
     // Coerce the instance from the pointer. This is theoretically safe since we control
     // the C++ side and can guarantee that the `exi_device_instance_ptr` is only owned
@@ -34,7 +34,7 @@ pub extern "C" fn slprs_jukebox_stop_music(exi_device_instance_ptr: usize) {
 }
 
 /// Calls through to `Jukebox::set_volume` with the Melee volume control.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_jukebox_set_melee_music_volume(exi_device_instance_ptr: usize, volume: u8) {
     // Coerce the instance from the pointer. This is theoretically safe since we control
     // the C++ side and can guarantee that the `exi_device_instance_ptr` is only owned
@@ -50,7 +50,7 @@ pub extern "C" fn slprs_jukebox_set_melee_music_volume(exi_device_instance_ptr: 
 }
 
 /// Calls through to `Jukebox::set_volume` with the DolphinSystem volume control.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_jukebox_set_dolphin_system_volume(exi_device_instance_ptr: usize, volume: u8) {
     // Coerce the instance from the pointer. This is theoretically safe since we control
     // the C++ side and can guarantee that the `exi_device_instance_ptr` is only owned
@@ -66,7 +66,7 @@ pub extern "C" fn slprs_jukebox_set_dolphin_system_volume(exi_device_instance_pt
 }
 
 /// Calls through to `Jukebox::set_volume` with the DolphinMusic volume control.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_jukebox_set_dolphin_music_volume(exi_device_instance_ptr: usize, volume: u8) {
     // Coerce the instance from the pointer. This is theoretically safe since we control
     // the C++ side and can guarantee that the `exi_device_instance_ptr` is only owned

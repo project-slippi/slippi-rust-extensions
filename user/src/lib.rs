@@ -4,11 +4,13 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-// use dolphin_integrations::Log;
 use slippi_gg_api::APIClient;
 
 mod chat;
 pub use chat::DEFAULT_CHAT_MESSAGES;
+
+mod direct_codes;
+use direct_codes::DirectCodes;
 
 mod watcher;
 use watcher::UserInfoWatcher;
@@ -59,6 +61,8 @@ pub struct UserManager {
     api_client: APIClient,
     user: Arc<Mutex<UserInfo>>,
     user_json_path: Arc<PathBuf>,
+    pub direct_codes: DirectCodes,
+    pub teams_direct_codes: DirectCodes,
     slippi_semver: String,
     watcher: Arc<Mutex<UserInfoWatcher>>,
 }
@@ -72,15 +76,33 @@ impl UserManager {
     /// this restriction via some assumptions.
     // @TODO: The semver param here should get refactored away in time once we've ironed out
     // how some things get persisted from the Dolphin side. Not a big deal to thread it for now.
-    pub fn new(api_client: APIClient, user_json_path: PathBuf, slippi_semver: String) -> Self {
+    pub fn new(api_client: APIClient, mut user_config_folder: PathBuf, slippi_semver: String) -> Self {
+        let direct_codes = DirectCodes::load({
+            let mut path = user_config_folder.clone();
+            path.push("direct-codes.json");
+            path
+        });
+
+        let teams_direct_codes = DirectCodes::load({
+            let mut path = user_config_folder.clone();
+            path.push("teams-codes.json");
+            path
+        });
+
+        let user_json_path = Arc::new({
+            user_config_folder.push("user.json");
+            user_config_folder
+        });
+
         let user = Arc::new(Mutex::new(UserInfo::default()));
-        let user_json_path = Arc::new(user_json_path);
         let watcher = Arc::new(Mutex::new(UserInfoWatcher::new()));
 
         Self {
             api_client,
             user,
             user_json_path,
+            direct_codes,
+            teams_direct_codes,
             slippi_semver,
             watcher,
         }
@@ -93,9 +115,6 @@ impl UserManager {
     ///
     /// This is slightly better ergonomics wise than dealing with locking all over the place, and
     /// allows batch retrieval of properties.
-    ///
-    /// If, in the rare event that a Mutex lock could not be acquired (which should... never
-    /// happen), this will call the provided closure with `&None` while logging the error.
     ///
     /// ```no_run
     /// use slippi_user::UserManager;

@@ -1,7 +1,7 @@
 # Slippi Rust Extensions
 This external module houses various Slippi-specific bits of functionality and is ultimately linked into the Dolphin executable and instrumented via the C FFI. This is an evolving workspace area and may be subject to changes.
 
-This workspace currently targets Rust `1.70.0`. As long as you have Rust installed, `cargo` should automatically configure this when building.
+This workspace currently targets Rust `1.88.0`. As long as you have Rust installed, `cargo` should automatically configure this when building.
 
 > You may opt to add other components (e.g `clippy`) as the toolchain file currently targets what the CI builders need.
 

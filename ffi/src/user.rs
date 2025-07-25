@@ -1,4 +1,4 @@
-use std::ffi::{c_char, c_int, CString};
+use std::ffi::{CString, c_char, c_int};
 
 use slippi_exi_device::SlippiEXIDevice;
 
@@ -6,14 +6,14 @@ use crate::{c_str_to_string, with, with_returning};
 
 /// Instructs the `UserManager` on the EXI Device at the provided pointer to attempt
 /// authentication. This runs synchronously on whatever thread it's called on.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_user_attempt_login(exi_device_instance_ptr: usize) -> bool {
     with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, |device| device.user_manager.attempt_login())
 }
 
 /// Instructs the `UserManager` on the EXI Device at the provided pointer to try to
 /// open the login page in a system-provided browser view.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_user_open_login_page(exi_device_instance_ptr: usize) {
     with::<SlippiEXIDevice, _>(exi_device_instance_ptr, |device| {
         device.user_manager.open_login_page();
@@ -22,7 +22,7 @@ pub extern "C" fn slprs_user_open_login_page(exi_device_instance_ptr: usize) {
 
 /// Instructs the `UserManager` on the EXI Device at the provided pointer to attempt
 /// to initiate the older update flow.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_user_update_app(exi_device_instance_ptr: usize) -> bool {
     with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, |device| device.user_manager.update_app())
 }
@@ -30,7 +30,7 @@ pub extern "C" fn slprs_user_update_app(exi_device_instance_ptr: usize) -> bool 
 /// Instructs the `UserManager` on the EXI Device at the provided pointer to start watching
 /// for the presence of a `user.json` file. The `UserManager` should have the requisite path
 /// already from EXI device instantiation.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_user_listen_for_login(exi_device_instance_ptr: usize) {
     with::<SlippiEXIDevice, _>(exi_device_instance_ptr, |device| {
         device.user_manager.watch_for_login();
@@ -39,7 +39,7 @@ pub extern "C" fn slprs_user_listen_for_login(exi_device_instance_ptr: usize) {
 
 /// Instructs the `UserManager` on the EXI Device at the provided pointer to sign the user out.
 /// This will delete the `user.json` file from the underlying filesystem.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_user_logout(exi_device_instance_ptr: usize) {
     with::<SlippiEXIDevice, _>(exi_device_instance_ptr, |device| {
         device.rank_manager.clear();
@@ -49,7 +49,7 @@ pub extern "C" fn slprs_user_logout(exi_device_instance_ptr: usize) {
 
 /// Hooks through the `UserManager` on the EXI Device at the provided pointer to overwrite the
 /// latest version field on the current user.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_user_overwrite_latest_version(exi_device_instance_ptr: usize, version: *const c_char) {
     let version = c_str_to_string(version, "slprs_user_overwrite_latest_version", "version");
 
@@ -60,7 +60,7 @@ pub extern "C" fn slprs_user_overwrite_latest_version(exi_device_instance_ptr: u
 
 /// Hooks through the `UserManager` on the EXI Device at the provided pointer to determine
 /// authentication status.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_user_get_is_logged_in(exi_device_instance_ptr: usize) -> bool {
     with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, |device| device.user_manager.is_logged_in())
 }
@@ -85,7 +85,7 @@ pub struct RustUserInfo {
 /// This involves slightly more allocations than ideal, so this shouldn't be called in a hot path.
 /// Over time this issue will not matter as once Matchmaking is moved to Rust we can share things
 /// quite easily.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_user_get_info(exi_device_instance_ptr: usize) -> *mut RustUserInfo {
     with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, |device| {
         let user_info = device.user_manager.get(|user| {
@@ -125,7 +125,7 @@ pub extern "C" fn slprs_user_get_info(exi_device_instance_ptr: usize) -> *mut Ru
 /// When the C/C++ side grabs `UserInfo`, it needs to ensure that it's passed back to Rust
 /// to ensure that the memory layout matches - do _not_ call `free` on `UserInfo`, pass it here
 /// instead.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_user_free_info(ptr: *mut RustUserInfo) {
     if ptr.is_null() {
         // Log here~?
@@ -189,7 +189,7 @@ impl RustChatMessages {
 /// Returns a C-compatible struct containing the chat message options for the current user.
 ///
 /// The return value of this _must_ be passed back to `slprs_user_free_messages` to free memory.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_user_get_messages(exi_device_instance_ptr: usize) -> *mut RustChatMessages {
     with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, |device| {
         let messages = device.user_manager.get(|user| {
@@ -206,7 +206,7 @@ pub extern "C" fn slprs_user_get_messages(exi_device_instance_ptr: usize) -> *mu
 /// Returns a C-compatible struct containing the default chat message options.
 ///
 /// The return value of this _must_ be passed back to `slprs_user_free_messages` to free memory.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_user_get_default_messages(exi_device_instance_ptr: usize) -> *mut RustChatMessages {
     with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, |_device| {
         let messages = Box::new(RustChatMessages::from(&slippi_user::DEFAULT_CHAT_MESSAGES));
@@ -216,7 +216,7 @@ pub extern "C" fn slprs_user_get_default_messages(exi_device_instance_ptr: usize
 
 /// Takes back ownership of a `RustChatMessages` instance and frees the underlying data
 /// by converting it into the proper Rust types.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_user_free_messages(ptr: *mut RustChatMessages) {
     if ptr.is_null() {
         // Log here~?
@@ -233,6 +233,75 @@ pub extern "C" fn slprs_user_free_messages(ptr: *mut RustChatMessages) {
         // Consume, walk, and free the inner items
         for message in messages.into_iter() {
             let _message = CString::from_raw(message);
+        }
+    }
+}
+
+/// Indicates what type of direct code operation we're in.
+#[repr(C)]
+pub enum DirectCodeKind {
+    DirectCodes = 1,
+    TeamsCodes = 2,
+}
+
+/// Passes along a direct code to add or update.
+#[unsafe(no_mangle)]
+pub extern "C" fn slprs_user_direct_codes_add_or_update(
+    exi_device_instance_ptr: usize,
+    kind: DirectCodeKind,
+    code: *const c_char,
+) {
+    let code = c_str_to_string(code, "slprs_user_add_or_update_direct_code", "code");
+
+    with::<SlippiEXIDevice, _>(exi_device_instance_ptr, move |device| match kind {
+        DirectCodeKind::DirectCodes => {
+            device.user_manager.direct_codes.add_or_update_code(code);
+        },
+
+        DirectCodeKind::TeamsCodes => {
+            device.user_manager.teams_direct_codes.add_or_update_code(code);
+        },
+    });
+}
+
+/// Gets the length of the current direct codes stack for the given `kind`.
+#[unsafe(no_mangle)]
+pub extern "C" fn slprs_user_direct_codes_get_length(exi_device_instance_ptr: usize, kind: DirectCodeKind) -> u32 {
+    with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, move |device| match kind {
+        DirectCodeKind::DirectCodes => device.user_manager.direct_codes.len() as u32,
+        DirectCodeKind::TeamsCodes => device.user_manager.teams_direct_codes.len() as u32,
+    })
+}
+
+/// Checks to see if we have a direct code at `index`.
+///
+/// This has the unfortunate aspect of going: Rust String -> CString -> C++ std::string, but
+/// this will go away over time. Just be aware it's doing more allocations than is perhaps
+/// ideal... but this area of code isn't performance sensitive anyway as it's not core
+/// gameplay.
+#[unsafe(no_mangle)]
+pub extern "C" fn slprs_user_direct_codes_get_code_at_index(
+    exi_device_instance_ptr: usize,
+    kind: DirectCodeKind,
+    index: usize,
+) -> *mut c_char {
+    let code = with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, move |device| match kind {
+        DirectCodeKind::DirectCodes => device.user_manager.direct_codes.get(index),
+        DirectCodeKind::TeamsCodes => device.user_manager.teams_direct_codes.get(index),
+    });
+
+    CString::new(code.as_bytes())
+        .expect("Unable to convert direct code to CString")
+        .into_raw()
+}
+
+/// As the allocator on the C++ could be different, we need to provide a `free` method
+/// that the C++ side will call when it's handled everything it needs to do.
+#[unsafe(no_mangle)]
+pub extern "C" fn slprs_user_direct_codes_free_code(code: *mut c_char) {
+    unsafe {
+        if !code.is_null() {
+            let _ = CString::from_raw(code);
         }
     }
 }
