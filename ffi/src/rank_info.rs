@@ -3,11 +3,11 @@ use std::ffi::c_uchar;
 use std::ffi::c_uint;
 use std::ffi::c_int;
 use slippi_exi_device::SlippiEXIDevice;
-use dolphin_integrations::Log;
 
-use slippi_rank_info::SlippiRank;
+
+
 use slippi_rank_info::RankInfoResponseStatus;
-use slippi_rank_info::RankManager;
+
 
 use crate::{with_returning};
 

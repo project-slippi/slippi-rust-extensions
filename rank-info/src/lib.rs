@@ -19,9 +19,10 @@ mod fetcher;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RankInfoResponseStatus {
-    Error,
+    None,
     Unreported,
-    Success
+    Success,
+    Error
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
