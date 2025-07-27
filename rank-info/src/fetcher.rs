@@ -59,18 +59,6 @@ impl RankInfoFetcher {
                         tracing::info!(target: Log::SlippiOnline, "prev rating: {0}", prev_rank_data.rating_ordinal);
                         tracing::info!(target: Log::SlippiOnline, "prev update count: {0}", prev_rank_data.rating_update_count);
 
-                        // Determine if rank response has successfully pulled updated info,
-                        // or if we have pulled the same data and the match is unreported
-                        // let rating_updated= false;
-                        // let 
-                        // let resp_status = 
-                        //     if rank_resp.rating_ordinal == prev_rank_data.rating_ordinal && rank_resp.rating_update_count != prev_rank_data.rating_update_count {
-                        //         RankInfoResponseStatus::Unreported
-                        //     }
-                        //     else {
-                        //         RankInfoResponseStatus::Success
-                        //     };
-
                         let has_cached_rating = prev_rank_data.rating_ordinal != 0.0;
                         let has_cached_rank = prev_rank_data.rank != 0;
 

@@ -23,8 +23,17 @@ pub struct RustRankInfo {
     pub rank_change: c_int,
 }
 
+// #[derive(Debug)]
+// #[repr(C)]
+// pub enum RankResponseStatus {
+//     None = 0,
+//     Unreported = 1,
+//     Success = 2,
+//     Error = 3
+// }
+
 /// Fetches the rank information of the user currently logged in.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_fetch_rank_info(exi_device_instance_ptr: usize) {
     with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, |device| {
         device.rank_manager.fetch_rank();
@@ -32,7 +41,7 @@ pub extern "C" fn slprs_fetch_rank_info(exi_device_instance_ptr: usize) {
 }
 
 /// Gets the most recently fetched rank information of the user currently logged in.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> *mut RustRankInfo {
     with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, |device| {
         // TODO :: match this and make a rustrankinfo
@@ -49,7 +58,7 @@ pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> *mut Ru
                 rank_change: curr_rank.rank_change as c_int,
             }),
             None => Box::new(RustRankInfo {
-                status: RankInfoResponseStatus::Error as c_uchar,
+                status: RankInfoResponseStatus::None as c_uchar,
                 rank: 0 as c_uchar,
                 rating_ordinal: 0.0 as c_float,
                 global_placing: 0 as c_uchar,
