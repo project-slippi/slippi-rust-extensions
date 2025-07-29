@@ -8,7 +8,6 @@ use slippi_user::{UserInfo, UserManager};
 use slippi_gg_api::APIClient;
 use tracing::dispatcher::with_default;
 use crate::utils::RankManagerError;
-use crate::RankInfoResponseStatus;
 
 use super::{RankManager, RankManagerData, RankInfo, Message};
 
@@ -45,7 +44,6 @@ impl RankInfoFetcher {
                         let prev_rank_data = match rank_data.clone().previous_rank {
                             Some(rank) => rank,
                             None => RankInfo {
-                                resp_status: RankInfoResponseStatus::Success as u8,
                                 rank: 0,
                                 rating_ordinal: 0.0,
                                 global_placing: 0,
@@ -88,8 +86,7 @@ impl RankInfoFetcher {
                             } else { 0 };
 
                         rank_data.current_rank = Some(RankInfo {
-                                resp_status: RankInfoResponseStatus::Success as u8,
-                                rank: (curr_rank - rank_change) as u8,
+                                rank: curr_rank - rank_change,
                                 rating_ordinal: curr_rating_ordinal,
                                 global_placing: match rank_resp.daily_regional_placement {
                                     Some(global_placement) => global_placement,
@@ -113,7 +110,6 @@ impl RankInfoFetcher {
                         tracing::info!(target: Log::SlippiOnline, "rating_update_count: {0}", test.rating_update_count);
 
                         Ok(RankInfo {
-                            resp_status: RankInfoResponseStatus::Success as u8,
                             rank: 0,
                             rating_ordinal: 0.0,
                             global_placing: 0,
@@ -142,7 +138,7 @@ pub fn run(
         match receiver.recv() {
             Ok(Message::FetchRank) => {
                 let connect_code = fetcher.user_manager.get(|user| user.connect_code.clone());
-                fetcher.fetch_user_rank(&connect_code);
+                let _ = fetcher.fetch_user_rank(&connect_code);
             },
 
             Ok(Message::RankFetcherDropped) => {

@@ -1,20 +1,15 @@
+use std::ffi::c_char;
 use std::ffi::c_float;
 use std::ffi::c_uchar;
 use std::ffi::c_uint;
 use std::ffi::c_int;
 use slippi_exi_device::SlippiEXIDevice;
 
-
-
-use slippi_rank_info::RankInfoResponseStatus;
-
-
 use crate::{with_returning};
 
 #[repr(C)]
 pub struct RustRankInfo {
-    pub status: c_uchar,
-    pub rank: c_uchar,
+    pub rank: c_char,
     pub rating_ordinal: c_float,
     pub global_placing: c_uchar,
     pub regional_placing: c_uchar,
@@ -22,15 +17,6 @@ pub struct RustRankInfo {
     pub rating_change: c_float,
     pub rank_change: c_int,
 }
-
-// #[derive(Debug)]
-// #[repr(C)]
-// pub enum RankResponseStatus {
-//     None = 0,
-//     Unreported = 1,
-//     Success = 2,
-//     Error = 3
-// }
 
 /// Fetches the rank information of the user currently logged in.
 #[unsafe(no_mangle)]
@@ -44,12 +30,10 @@ pub extern "C" fn slprs_fetch_rank_info(exi_device_instance_ptr: usize) {
 #[unsafe(no_mangle)]
 pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> *mut RustRankInfo {
     with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, |device| {
-        // TODO :: match this and make a rustrankinfo
         let rank_info = match device.rank_manager.get_rank()
         {
             Some(curr_rank) => Box::new(RustRankInfo {
-                status: curr_rank.resp_status as c_uchar,
-                rank: curr_rank.rank as c_uchar,
+                rank: curr_rank.rank as c_char,
                 rating_ordinal: curr_rank.rating_ordinal as c_float,
                 global_placing: curr_rank.global_placing as c_uchar,
                 regional_placing: curr_rank.regional_placing as c_uchar,
@@ -58,8 +42,7 @@ pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> *mut Ru
                 rank_change: curr_rank.rank_change as c_int,
             }),
             None => Box::new(RustRankInfo {
-                status: RankInfoResponseStatus::None as c_uchar,
-                rank: 0 as c_uchar,
+                rank: -1 as c_char, // Send invalid rank if data is empty
                 rating_ordinal: 0.0 as c_float,
                 global_placing: 0 as c_uchar,
                 regional_placing: 0 as c_uchar,

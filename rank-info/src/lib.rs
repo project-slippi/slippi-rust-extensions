@@ -18,14 +18,6 @@ use slippi_user::*;
 mod fetcher;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RankInfoResponseStatus {
-    None,
-    Unreported,
-    Success,
-    Error
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SlippiRank {
     Unranked,
     Bronze1,
@@ -53,8 +45,7 @@ pub enum SlippiRank {
 
 #[derive(Debug, Clone, Default)]
 pub struct RankInfo {
-    pub resp_status: u8,
-    pub rank: u8,
+    pub rank: i8,
     pub rating_ordinal: f32,
     pub global_placing: u8,
     pub regional_placing: u8,
@@ -95,7 +86,7 @@ impl RankManager {
 
         // Fetch rank on boot (this doesnt work, this is when dolphin opens there is no user)
         let connect_code = user_manager.get(|user| user.connect_code.clone());
-        fetcher.fetch_user_rank(&connect_code);
+        let _ = fetcher.fetch_user_rank(&connect_code);
         
         let fetcher_thread = thread::Builder::new()
             .name("RankInfoFetcherThread".into())

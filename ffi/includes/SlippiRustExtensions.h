@@ -71,8 +71,7 @@ typedef struct RustChatMessages {
 } RustChatMessages;
 
 typedef struct RustRankInfo {
-  unsigned char status;
-  unsigned char rank;
+  char rank;
   float rating_ordinal;
   unsigned char global_placing;
   unsigned char regional_placing;
