@@ -162,36 +162,24 @@ pub extern "C" fn slprs_exi_device_start_new_reporter_session(instance_ptr: usiz
 }
 
 /// Calls through to the `SlippiGameReporter` on the EXI device to report a
-/// match completion event.
+/// match status update event.
 #[unsafe(no_mangle)]
-pub extern "C" fn slprs_exi_device_report_match_completion(instance_ptr: usize, match_id: *const c_char, end_mode: u8) {
+pub extern "C" fn slprs_exi_device_report_match_status(
+    instance_ptr: usize,
+    match_id: *const c_char,
+    status: *const c_char,
+    background: bool,
+) {
     // Coerce the instances from the pointers. This is theoretically safe since we control
     // the C++ side and can guarantee that the pointers are only owned
     // by us, and are created/destroyed with the corresponding lifetimes.
     let device = unsafe { Box::from_raw(instance_ptr as *mut SlippiEXIDevice) };
 
-    let fn_name = "slprs_exi_device_report_match_completion";
+    let fn_name = "slprs_exi_device_report_match_status";
     let match_id = c_str_to_string(match_id, fn_name, "match_id");
+    let status = c_str_to_string(status, fn_name, "status");
 
-    device.game_reporter.report_completion(match_id, end_mode);
-
-    // Fall back into a raw pointer so Rust doesn't obliterate the object.
-    let _leak = Box::into_raw(device);
-}
-
-/// Calls through to the `SlippiGameReporter` on the EXI device to report a
-/// match abandon event.
-#[unsafe(no_mangle)]
-pub extern "C" fn slprs_exi_device_report_match_abandonment(instance_ptr: usize, match_id: *const c_char) {
-    // Coerce the instances from the pointers. This is theoretically safe since we control
-    // the C++ side and can guarantee that the pointers are only owned
-    // by us, and are created/destroyed with the corresponding lifetimes.
-    let device = unsafe { Box::from_raw(instance_ptr as *mut SlippiEXIDevice) };
-
-    let fn_name = "slprs_exi_device_report_match_abandonment";
-    let match_id = c_str_to_string(match_id, fn_name, "match_id");
-
-    device.game_reporter.report_abandonment(match_id);
+    device.game_reporter.report_match_status(match_id, status, background);
 
     // Fall back into a raw pointer so Rust doesn't obliterate the object.
     let _leak = Box::into_raw(device);

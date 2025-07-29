@@ -26,14 +26,14 @@ pub(crate) enum ProcessingEvent {
     Shutdown,
 }
 
-/// Used to pass completion event data to a background processing thread.
+/// Used to pass status report event data to a background processing thread.
 #[derive(Clone, Debug)]
-pub(crate) enum CompletionEvent {
+pub(crate) enum StatusReportEvent {
     ReportAvailable {
         uid: String,
         play_key: String,
         match_id: String,
-        end_mode: u8,
+        status: String,
     },
 
     Shutdown,
@@ -52,8 +52,8 @@ pub struct GameReporter {
     iso_md5_hasher_thread: Option<thread::JoinHandle<()>>,
     queue_thread: Option<thread::JoinHandle<()>>,
     queue_thread_notifier: Sender<ProcessingEvent>,
-    completion_thread: Option<thread::JoinHandle<()>>,
-    completion_thread_notifier: Sender<CompletionEvent>,
+    status_report_thread: Option<thread::JoinHandle<()>>,
+    status_report_thread_notifier: Sender<StatusReportEvent>,
     queue: GameReporterQueue,
     replay_data: Arc<Mutex<Vec<u8>>>,
 }
@@ -91,14 +91,15 @@ impl GameReporter {
             })
             .expect("Failed to spawn GameReporterQueueProcessingThread.");
 
-        let (completion_sender, completion_receiver) = mpsc::channel();
+        let (status_report_sender, status_report_receiver) = mpsc::channel();
 
-        let completion_thread = thread::Builder::new()
-            .name("GameReporterCompletionProcessingThread".into())
+        let api_for_status = api_client.clone();
+        let status_report_thread = thread::Builder::new()
+            .name("GameReporterStatusReportProcessingThread".into())
             .spawn(move || {
-                queue::run_completion(api_client, completion_receiver);
+                queue::run_report_match_status(api_for_status, status_report_receiver);
             })
-            .expect("Failed to spawn GameReporterCompletionProcessingThread.");
+            .expect("Failed to spawn GameReporterStatusReportProcessingThread.");
 
         Self {
             user_manager,
@@ -106,8 +107,8 @@ impl GameReporter {
             replay_data: Arc::new(Mutex::new(Vec::new())),
             queue_thread_notifier: queue_sender,
             queue_thread: Some(queue_thread),
-            completion_thread_notifier: completion_sender,
-            completion_thread: Some(completion_thread),
+            status_report_thread_notifier: status_report_sender,
+            status_report_thread: Some(status_report_thread),
             iso_md5_hasher_thread: Some(iso_md5_hasher_thread),
         }
     }
@@ -147,29 +148,34 @@ impl GameReporter {
         }
     }
 
-    /// Reports a match abandon event.
-    pub fn report_abandonment(&self, match_id: String) {
+    pub fn report_match_status(&self, match_id: String, status: String, background: bool) {
         let (uid, play_key) = self.user_manager.get(|user| (user.uid.clone(), user.play_key.clone()));
 
-        self.queue.report_abandonment(uid, play_key, match_id);
-    }
+        // If synchronous, call directly
+        if !background {
+            queue::report_match_status(
+                &self.queue.api_client,
+                uid.clone(),
+                match_id.clone(),
+                play_key.clone(),
+                status.clone(),
+            );
+            return;
+        }
 
-    /// Dispatches a completion report to a background processing thread.
-    pub fn report_completion(&self, match_id: String, end_mode: u8) {
-        let (uid, play_key) = self.user_manager.get(|user| (user.uid.clone(), user.play_key.clone()));
-
-        let event = CompletionEvent::ReportAvailable {
+        // If background, send to the processing thread
+        let event = StatusReportEvent::ReportAvailable {
             uid,
             play_key,
             match_id,
-            end_mode,
+            status,
         };
 
-        if let Err(e) = self.completion_thread_notifier.send(event) {
+        if let Err(e) = self.status_report_thread_notifier.send(event) {
             tracing::error!(
                 target: Log::SlippiOnline,
                 error = ?e,
-                "Unable to dispatch match completion notification"
+                "Unable to dispatch match status report notification"
             );
         }
     }
@@ -207,20 +213,20 @@ impl Drop for GameReporter {
             }
         }
 
-        if let Some(completion_thread) = self.completion_thread.take() {
-            if let Err(e) = self.completion_thread_notifier.send(CompletionEvent::Shutdown) {
+        if let Some(status_report_thread) = self.status_report_thread.take() {
+            if let Err(e) = self.status_report_thread_notifier.send(StatusReportEvent::Shutdown) {
                 tracing::error!(
                     target: Log::SlippiOnline,
                     error = ?e,
-                    "Failed to send shutdown notification to completion processing thread, may hang"
+                    "Failed to send shutdown notification to status report processing thread, may hang"
                 );
             }
 
-            if let Err(e) = completion_thread.join() {
+            if let Err(e) = status_report_thread.join() {
                 tracing::error!(
                     target: Log::SlippiOnline,
                     error = ?e,
-                    "Completion thread failure"
+                    "Status report thread failure"
                 );
             }
         }
