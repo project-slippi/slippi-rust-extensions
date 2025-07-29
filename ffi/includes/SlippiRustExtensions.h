@@ -394,7 +394,7 @@ void slprs_fetch_rank_info(uintptr_t exi_device_instance_ptr);
 /**
  * Gets the most recently fetched rank information of the user currently logged in.
  */
-struct RustRankInfo *slprs_get_rank_info(uintptr_t exi_device_instance_ptr);
+struct RustRankInfo slprs_get_rank_info(uintptr_t exi_device_instance_ptr);
 
 #ifdef __cplusplus
 }  // extern "C"

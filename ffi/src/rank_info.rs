@@ -28,11 +28,11 @@ pub extern "C" fn slprs_fetch_rank_info(exi_device_instance_ptr: usize) {
 
 /// Gets the most recently fetched rank information of the user currently logged in.
 #[unsafe(no_mangle)]
-pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> *mut RustRankInfo {
+pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> RustRankInfo {
     with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, |device| {
         let rank_info = match device.rank_manager.get_rank()
         {
-            Some(curr_rank) => Box::new(RustRankInfo {
+            Some(curr_rank) => RustRankInfo {
                 rank: curr_rank.rank as c_char,
                 rating_ordinal: curr_rank.rating_ordinal as c_float,
                 global_placing: curr_rank.global_placing as c_uchar,
@@ -40,8 +40,8 @@ pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> *mut Ru
                 rating_update_count: curr_rank.rating_update_count as c_uint,
                 rating_change: curr_rank.rating_change as c_float,
                 rank_change: curr_rank.rank_change as c_int,
-            }),
-            None => Box::new(RustRankInfo {
+            },
+            None => RustRankInfo {
                 rank: -1 as c_char, // Send invalid rank if data is empty
                 rating_ordinal: 0.0 as c_float,
                 global_placing: 0 as c_uchar,
@@ -49,8 +49,8 @@ pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> *mut Ru
                 rating_update_count: 0 as c_uint,
                 rating_change: 0.0 as c_float,
                 rank_change: 0 as c_int,
-            })
+            }
         };
-        Box::into_raw(rank_info)
+        rank_info
     })
 }
