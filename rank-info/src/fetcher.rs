@@ -169,20 +169,11 @@ pub struct RankInfoAPIResponse {
     #[serde(alias = "ratingUpdateCount")]
     pub rating_update_count: u32,
 
-    #[serde(alias = "wins")]
-    pub wins: u32,
-
-    #[serde(alias = "losses")]
-    pub losses: u32,
-
     #[serde(alias = "dailyGlobalPlacement", default)]
     pub daily_global_placement: Option<u8>,
 
     #[serde(alias = "dailyRegionalPlacement", default)]
     pub daily_regional_placement: Option<u8>,
-
-    #[serde(alias = "continent", default)]
-    pub continent: Option<String>,
 }
 
 const GRAPHQL_URL: &str = "https://internal.slippi.gg/graphql";
@@ -192,8 +183,6 @@ pub(crate) fn execute_rank_query(api_client: &APIClient, connect_code: &str) -> 
         fragment profileFields on NetplayProfile {
             ratingOrdinal
             ratingUpdateCount
-            wins
-            losses
             dailyGlobalPlacement
             dailyRegionalPlacement
         }
