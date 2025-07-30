@@ -1,20 +1,14 @@
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::Duration;
 
-use slippi_user::{UserInfo, UserManager};
+use slippi_user::{UserManager};
 use slippi_gg_api::APIClient;
-use tracing::dispatcher::with_default;
-use crate::utils::RankManagerError;
 
 use super::{RankManager, RankManagerData, RankInfo, Message};
 
 use dolphin_integrations::Log;
 use serde_json::{json, Value};
 use thiserror::Error;
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{Receiver};
 
 #[derive(Debug)]
 pub struct RankInfoFetcher {
@@ -156,18 +150,6 @@ pub fn run(
             },
         }
     }
-}
-
-#[derive(Error, Debug)]
-pub enum RankFetcherError {
-    #[error("Failed to spawn thread: {0}")]
-    ThreadSpawn(std::io::Error),
-
-    #[error("The channel sender has disconnected, implying no further messages will be received.")]
-    ChannelSenderDisconnected(#[from] std::sync::mpsc::RecvError),
-
-    #[error("Unknown RankManager Error")]
-    Unknown,
 }
 
 #[derive(Error, Debug)]

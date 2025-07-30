@@ -1,18 +1,10 @@
 use fetcher::RankInfoFetcher;
-use serde::de::value::Error;
-use RankManagerError::*;
 use slippi_gg_api::APIClient;
 use dolphin_integrations::Log;
 use std::sync::{Arc, Mutex};
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{channel, Sender};
 use crate::Message::*;
-
 use std::thread;
-mod utils;
-use utils::GetRankErrorKind;
-use utils::RankManagerError;
-use utils::execute_rank_query;
-
 use slippi_user::*;
 
 mod fetcher;
@@ -88,7 +80,7 @@ impl RankManager {
         let connect_code = user_manager.get(|user| user.connect_code.clone());
         let _ = fetcher.fetch_user_rank(&connect_code);
         
-        let fetcher_thread = thread::Builder::new()
+        let _fetcher_thread = thread::Builder::new()
             .name("RankInfoFetcherThread".into())
             .spawn(move || {
                 fetcher::run(fetcher, rx);
