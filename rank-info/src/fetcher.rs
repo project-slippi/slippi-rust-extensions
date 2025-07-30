@@ -1,14 +1,14 @@
 use std::sync::{Arc, Mutex};
 
-use slippi_user::{UserManager};
 use slippi_gg_api::APIClient;
+use slippi_user::UserManager;
 
-use super::{RankManager, RankManagerData, RankInfo, Message};
+use super::{Message, RankInfo, RankManager, RankManagerData};
 
 use dolphin_integrations::Log;
 use serde_json::{json, Value};
+use std::sync::mpsc::Receiver;
 use thiserror::Error;
-use std::sync::mpsc::{Receiver};
 
 #[derive(Debug)]
 pub struct RankInfoFetcher {
@@ -44,8 +44,8 @@ impl RankInfoFetcher {
                                 regional_placing: 0,
                                 rating_update_count: 0,
                                 rank_change: 0,
-                                rating_change: 0.0
-                            }
+                                rating_change: 0.0,
+                            },
                         };
                         tracing::info!(target: Log::SlippiOnline, "prev rank: {0}", prev_rank_data.rank);
                         tracing::info!(target: Log::SlippiOnline, "prev rating: {0}", prev_rank_data.rating_ordinal);
@@ -54,46 +54,46 @@ impl RankInfoFetcher {
                         let has_cached_rating = prev_rank_data.rating_ordinal != 0.0;
                         let has_cached_rank = prev_rank_data.rank != 0;
 
-                        let rating_change: f32 =
-                            if has_cached_rating { 
-                                rank_resp.rating_ordinal - prev_rank_data.rating_ordinal
-                            } else { 0.0 };
+                        let rating_change: f32 = if has_cached_rating {
+                            rank_resp.rating_ordinal - prev_rank_data.rating_ordinal
+                        } else {
+                            0.0
+                        };
 
-                        let curr_rating_ordinal = 
-                            if !has_cached_rating { 
-                                rank_resp.rating_ordinal 
-                            } else { 
-                                prev_rank_data.rating_ordinal 
-                            };
+                        let curr_rating_ordinal = if !has_cached_rating {
+                            rank_resp.rating_ordinal
+                        } else {
+                            prev_rank_data.rating_ordinal
+                        };
 
-                        let curr_rank = 
-                            RankManager::decide_rank(
-                                    rank_resp.rating_ordinal, 
-                                    rank_resp.daily_global_placement.unwrap_or_default(), 
-                                    rank_resp.daily_regional_placement.unwrap_or_default(),
-                                    rank_resp.rating_update_count
-                                ) as i8;
+                        let curr_rank = RankManager::decide_rank(
+                            rank_resp.rating_ordinal,
+                            rank_resp.daily_global_placement.unwrap_or_default(),
+                            rank_resp.daily_regional_placement.unwrap_or_default(),
+                            rank_resp.rating_update_count,
+                        ) as i8;
 
-                        let rank_change: i8 = 
-                            if has_cached_rank { 
-                                curr_rank - prev_rank_data.rank as i8
-                            } else { 0 };
+                        let rank_change: i8 = if has_cached_rank {
+                            curr_rank - prev_rank_data.rank as i8
+                        } else {
+                            0
+                        };
 
                         rank_data.current_rank = Some(RankInfo {
-                                rank: curr_rank - rank_change,
-                                rating_ordinal: curr_rating_ordinal,
-                                global_placing: match rank_resp.daily_regional_placement {
-                                    Some(global_placement) => global_placement,
-                                    None => 0
-                                },
-                                regional_placing: match rank_resp.daily_regional_placement {
-                                    Some(regional_placement) => regional_placement,
-                                    None => 0
-                                },
-                                rating_update_count: rank_resp.rating_update_count,
-                                rating_change: rating_change,
-                                rank_change: rank_change as i32
-                            });
+                            rank: curr_rank - rank_change,
+                            rating_ordinal: curr_rating_ordinal,
+                            global_placing: match rank_resp.daily_regional_placement {
+                                Some(global_placement) => global_placement,
+                                None => 0,
+                            },
+                            regional_placing: match rank_resp.daily_regional_placement {
+                                Some(regional_placement) => regional_placement,
+                                None => 0,
+                            },
+                            rating_update_count: rank_resp.rating_update_count,
+                            rating_change: rating_change,
+                            rank_change: rank_change as i32,
+                        });
 
                         // debug logs
                         let test = rank_data.current_rank.clone().unwrap();
@@ -110,24 +110,18 @@ impl RankInfoFetcher {
                             regional_placing: 0,
                             rating_update_count: 0,
                             rating_change: rating_change,
-                            rank_change: rank_change as i32
+                            rank_change: rank_change as i32,
                         })
                     },
                     Err(_err) => Err(GetRankErrorKind::NotSuccessful("Failed to parse rank struct".to_owned())),
                 }
-            }
-            Err(err) => {
-
-                Err(err)
-            }
+            },
+            Err(err) => Err(err),
         }
     }
 }
 
-pub fn run(
-    fetcher: RankInfoFetcher, 
-    receiver: Receiver<Message>
-) {
+pub fn run(fetcher: RankInfoFetcher, receiver: Receiver<Message>) {
     loop {
         match receiver.recv() {
             Ok(Message::FetchRank) => {
@@ -168,7 +162,7 @@ pub enum GetRankErrorKind {
 }
 
 #[derive(Debug, Clone, Default, serde::Deserialize)]
-pub struct RankInfoAPIResponse  {
+pub struct RankInfoAPIResponse {
     #[serde(alias = "ratingOrdinal")]
     pub rating_ordinal: f32,
 
@@ -188,15 +182,12 @@ pub struct RankInfoAPIResponse  {
     pub daily_regional_placement: Option<u8>,
 
     #[serde(alias = "continent", default)]
-    pub continent: Option<String>
+    pub continent: Option<String>,
 }
 
 const GRAPHQL_URL: &str = "https://internal.slippi.gg/graphql";
 
-pub(crate) fn execute_rank_query(
-    api_client: &APIClient,
-    connect_code: &str,
-) -> Result<String, GetRankErrorKind> {
+pub(crate) fn execute_rank_query(api_client: &APIClient, connect_code: &str) -> Result<String, GetRankErrorKind> {
     let profile_fields = r#"
         fragment profileFields on NetplayProfile {
             ratingOrdinal
@@ -216,7 +207,8 @@ pub(crate) fn execute_rank_query(
         }
     "#;
 
-    let query = format!(r#"
+    let query = format!(
+        r#"
         {user_profile_page}
         {profile_fields}
 
@@ -225,7 +217,8 @@ pub(crate) fn execute_rank_query(
                 ...userProfilePage
             }}
         }}
-    "#);
+    "#
+    );
 
     let variables = Some(json!({
         "cc": connect_code,
@@ -249,7 +242,7 @@ pub(crate) fn execute_rank_query(
         .send_json(&request_body)
         .map_err(GetRankErrorKind::Net)?;
 
-    let response_body = response.into_string().unwrap_or_else(|e| format!("Error: {}", e)); 
+    let response_body = response.into_string().unwrap_or_else(|e| format!("Error: {}", e));
 
     // Parse the response JSON
     let response_json: Value = serde_json::from_str(&response_body).map_err(GetRankErrorKind::JSON)?;

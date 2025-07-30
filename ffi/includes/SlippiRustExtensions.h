@@ -45,6 +45,16 @@ typedef struct SlippiRustEXIConfig {
   void (*osd_add_msg_fn)(const char*, uint32_t, uint32_t);
 } SlippiRustEXIConfig;
 
+typedef struct RustRankInfo {
+  char rank;
+  float rating_ordinal;
+  unsigned char global_placing;
+  unsigned char regional_placing;
+  unsigned int rating_update_count;
+  float rating_change;
+  int rank_change;
+} RustRankInfo;
+
 /**
  * An intermediary type for moving `UserInfo` across the FFI boundary.
  *
@@ -69,16 +79,6 @@ typedef struct RustChatMessages {
   char **data;
   int len;
 } RustChatMessages;
-
-typedef struct RustRankInfo {
-  char rank;
-  float rating_ordinal;
-  unsigned char global_placing;
-  unsigned char regional_placing;
-  unsigned int rating_update_count;
-  float rating_change;
-  int rank_change;
-} RustRankInfo;
 
 #ifdef __cplusplus
 extern "C" {
@@ -268,6 +268,16 @@ void slprs_logging_update_container(const char *kind, bool enabled, int level);
 void slprs_mainline_logging_update_log_level(int level);
 
 /**
+ * Fetches the rank information of the user currently logged in.
+ */
+void slprs_fetch_rank_info(uintptr_t exi_device_instance_ptr);
+
+/**
+ * Gets the most recently fetched rank information of the user currently logged in.
+ */
+struct RustRankInfo slprs_get_rank_info(uintptr_t exi_device_instance_ptr);
+
+/**
  * Instructs the `UserManager` on the EXI Device at the provided pointer to attempt
  * authentication. This runs synchronously on whatever thread it's called on.
  */
@@ -380,16 +390,6 @@ char *slprs_user_direct_codes_get_code_at_index(uintptr_t exi_device_instance_pt
  * that the C++ side will call when it's handled everything it needs to do.
  */
 void slprs_user_direct_codes_free_code(char *code);
-
-/**
- * Fetches the rank information of the user currently logged in.
- */
-void slprs_fetch_rank_info(uintptr_t exi_device_instance_ptr);
-
-/**
- * Gets the most recently fetched rank information of the user currently logged in.
- */
-struct RustRankInfo slprs_get_rank_info(uintptr_t exi_device_instance_ptr);
 
 #ifdef __cplusplus
 }  // extern "C"

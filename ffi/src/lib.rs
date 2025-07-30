@@ -13,8 +13,8 @@ pub mod exi;
 pub mod game_reporter;
 pub mod jukebox;
 pub mod logger;
-pub mod user;
 pub mod rank_info;
+pub mod user;
 
 /// A small helper method for moving in and out of our known types.
 ///

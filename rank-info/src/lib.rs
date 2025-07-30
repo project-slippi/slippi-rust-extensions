@@ -1,11 +1,11 @@
+use crate::Message::*;
+use dolphin_integrations::Log;
 use fetcher::RankInfoFetcher;
 use slippi_gg_api::APIClient;
-use dolphin_integrations::Log;
-use std::sync::{Arc, Mutex};
-use std::sync::mpsc::{channel, Sender};
-use crate::Message::*;
-use std::thread;
 use slippi_user::*;
+use std::sync::mpsc::{channel, Sender};
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 mod fetcher;
 
@@ -31,9 +31,8 @@ pub enum SlippiRank {
     Master2,
     Master3,
     Grandmaster,
-    Count
+    Count,
 }
-
 
 #[derive(Debug, Clone, Default)]
 pub struct RankInfo {
@@ -43,7 +42,7 @@ pub struct RankInfo {
     pub regional_placing: u8,
     pub rating_update_count: u32,
     pub rating_change: f32,
-    pub rank_change: i32
+    pub rank_change: i32,
 }
 
 #[derive(Debug)]
@@ -70,16 +69,12 @@ impl RankManager {
         let (tx, rx) = channel::<Message>();
         let rank_data = Arc::new(Mutex::new(RankManagerData::default()));
 
-        let fetcher = RankInfoFetcher::new(
-            api_client.clone(), 
-            user_manager.clone(),
-            rank_data.clone(),
-        );
+        let fetcher = RankInfoFetcher::new(api_client.clone(), user_manager.clone(), rank_data.clone());
 
         // Fetch rank on boot (this doesnt work, this is when dolphin opens there is no user)
         let connect_code = user_manager.get(|user| user.connect_code.clone());
         let _ = fetcher.fetch_user_rank(&connect_code);
-        
+
         let _fetcher_thread = thread::Builder::new()
             .name("RankInfoFetcherThread".into())
             .spawn(move || {
@@ -87,14 +82,10 @@ impl RankManager {
             })
             .expect("Failed to spawn RankInfoFetcherThread.");
 
-        Self {
-            tx,
-            rank_data,
-        }
+        Self { tx, rank_data }
     }
 
-    pub fn fetch_rank(&self)
-    {
+    pub fn fetch_rank(&self) {
         // Send a message to the rank fetcher with the user's connect code
         let _ = self.tx.send(FetchRank);
     }
@@ -172,12 +163,9 @@ impl RankManager {
         }
         SlippiRank::Unranked
     }
-
- 
 }
 
-impl Drop for RankManager
-{
+impl Drop for RankManager {
     fn drop(&mut self) {
         tracing::info!(target: Log::SlippiOnline, "Dropping Rank Fetcher");
         if let Err(e) = self.tx.send(Message::RankFetcherDropped) {
