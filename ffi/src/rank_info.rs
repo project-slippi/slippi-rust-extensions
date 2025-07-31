@@ -30,7 +30,7 @@ pub extern "C" fn slprs_fetch_rank_info(exi_device_instance_ptr: usize) {
 #[unsafe(no_mangle)]
 pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> RustRankInfo {
     with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, |device| {
-        let rank_info = match device.rank_manager.get_rank() {
+        return match device.rank_manager.get_rank() {
             Some(curr_rank) => RustRankInfo {
                 rank: curr_rank.rank as c_char,
                 rating_ordinal: curr_rank.rating_ordinal as c_float,
@@ -50,6 +50,5 @@ pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> RustRan
                 rank_change: 0 as c_int,
             },
         };
-        rank_info
     })
 }

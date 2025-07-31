@@ -102,6 +102,8 @@ impl RankInfoFetcher {
                         tracing::info!(target: Log::SlippiOnline, "global_placing: {0}", test.global_placing);
                         tracing::info!(target: Log::SlippiOnline, "regional_placing: {0}", test.regional_placing);
                         tracing::info!(target: Log::SlippiOnline, "rating_update_count: {0}", test.rating_update_count);
+                        tracing::info!(target: Log::SlippiOnline, "rating_change: {0}", test.rating_change);
+                        tracing::info!(target: Log::SlippiOnline, "rank_change: {0}", test.rank_change);
 
                         Ok(RankInfo {
                             rank: 0,

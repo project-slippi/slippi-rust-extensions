@@ -11,6 +11,6 @@ tracing = { workspace = true }
 dolphin-integrations = { path = "../dolphin" }
 serde_json = { workspace = true }
 serde_repr = { workspace = true }
-thiserror = "1.0.44"
+thiserror = { workspace = true }
 slippi-gg-api = { path = "../slippi-gg-api" }
 slippi-user = { path = "../user" }

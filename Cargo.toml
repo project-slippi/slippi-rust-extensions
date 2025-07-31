@@ -29,6 +29,7 @@ time = { version = "0.3.41", default-features = false, features = ["formatting",
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
 serde_repr = { version = "0.1" }
+thiserror = { version = "1.0.44" }
 
 # We disable the "attributes" feature as we don't currently need it and it brings
 # in extra dependencies.
