@@ -60,10 +60,12 @@ impl RankInfoFetcher {
                             0.0
                         };
 
-                        let curr_rating_ordinal = if !has_cached_rating {
+                        let curr_rating_ordinal = if rank_resp.rating_ordinal != 0.0 {
                             rank_resp.rating_ordinal
-                        } else {
+                        } else if has_cached_rating {
                             prev_rank_data.rating_ordinal
+                        } else {
+                            0.0
                         };
 
                         let curr_rank = RankManager::decide_rank(
