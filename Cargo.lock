@@ -1255,6 +1255,8 @@ dependencies = [
 name = "slippi-gg-api"
 version = "0.1.0"
 dependencies = [
+ "serde",
+ "serde_json",
  "tracing",
  "ureq",
 ]

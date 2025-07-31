@@ -11,8 +11,10 @@ edition = "2024"
 publish = false
 
 [dependencies]
-ureq = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 tracing = { workspace = true }
+ureq = { workspace = true }
 
 [features]
 default = ["ishiiruka"]
