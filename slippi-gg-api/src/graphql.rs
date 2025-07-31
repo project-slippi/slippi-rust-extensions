@@ -28,7 +28,7 @@ pub struct GraphQLBuilder {
     client: APIClient,
     endpoint: Cow<'static, str>,
     response_field: Option<Cow<'static, str>>,
-    body: HashMap<&'static str, Value>
+    body: HashMap<&'static str, Value>,
 }
 
 impl GraphQLBuilder {
@@ -41,7 +41,7 @@ impl GraphQLBuilder {
             client,
             endpoint: Cow::Borrowed("https://internal.slippi.gg/graphql"),
             response_field: None,
-            body
+            body,
         }
     }
 
@@ -68,7 +68,8 @@ impl GraphQLBuilder {
     where
         T: serde::de::DeserializeOwned,
     {
-        let response_body = self.client
+        let response_body = self
+            .client
             .post(self.endpoint.as_ref())
             .send_json(&self.body)
             .map_err(GraphQLError::Request)?
@@ -93,27 +94,20 @@ impl GraphQLBuilder {
                     Err(error) => {
                         tracing::error!(?error, "Failed to pretty-format error string");
                         return Err(GraphQLError::FailedErrorFormatting);
-                    }
+                    },
                 }
             }
         }
 
         // Now attempt to extract the response payload. If we have it, then we'll attempt
         // to deserialize it to the expected response type.
-        let mut data = response
-            .get_mut("data")
-            .ok_or(GraphQLError::MissingResponseData)?
-            .take();
+        let mut data = response.get_mut("data").ok_or(GraphQLError::MissingResponseData)?.take();
 
         // Search further in the payload if we've set a key to use.
         if let Some(field) = self.response_field {
-            data = data
-                .get_mut(field.as_ref())
-                .ok_or(GraphQLError::MissingResponseField)?
-                .take();
+            data = data.get_mut(field.as_ref()).ok_or(GraphQLError::MissingResponseField)?.take();
         }
 
-        serde_json::from_value(data)
-            .map_err(GraphQLError::InvalidResponseJSON)
+        serde_json::from_value(data).map_err(GraphQLError::InvalidResponseJSON)
     }
 }
