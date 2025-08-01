@@ -149,30 +149,19 @@ pub struct RankInfoAPIResponse {
 
 fn execute_rank_query(api_client: &APIClient, connect_code: &str) -> Result<RankInfoAPIResponse, GraphQLError> {
     let query = r#"
-        fragment userProfilePage on User {
-            rankedNetplayProfile {
-                ...profileFields
+        query ($cc: String) {
+            getUser(connectCode: $cc) {
+                rankedNetplayProfile {
+                    ratingOrdinal
+                    ratingUpdateCount
+                    dailyGlobalPlacement
+                    dailyRegionalPlacement
+                }
             }
         }
-
-        fragment profileFields on NetplayProfile {
-            ratingOrdinal
-            ratingUpdateCount
-            dailyGlobalPlacement
-            dailyRegionalPlacement
-        }
-
-        query UserProfilePageQuery($cc: String, $uid: String) {{
-            getUser(fbUid: $uid, connectCode: $cc) {{
-                ...userProfilePage
-            }}
-        }}
     "#;
 
-    let variables = json!({
-        "cc": connect_code,
-        "uid": connect_code
-    });
+    let variables = json!({ "cc": connect_code });
 
     let response: RankInfoAPIResponse = api_client
         .graphql(query)
