@@ -7,7 +7,7 @@ use std::thread;
 
 use dolphin_integrations::Log;
 use slippi_gg_api::APIClient;
-use slippi_user::*;
+use slippi_user::UserManager;
 
 use crate::Message::*;
 
