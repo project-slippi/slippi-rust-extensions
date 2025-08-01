@@ -166,7 +166,7 @@ fn execute_rank_query(api_client: &APIClient, connect_code: &str) -> Result<Rank
     let response: RankInfoAPIResponse = api_client
         .graphql(query)
         .variables(variables)
-        .data_field("rankedNetplayProfile")
+        .data_field("/data/getUser/rankedNetplayProfile")
         .send()?;
 
     Ok(response)
