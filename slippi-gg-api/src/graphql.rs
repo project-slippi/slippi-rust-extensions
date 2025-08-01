@@ -74,11 +74,11 @@ impl GraphQLBuilder {
     /// Sets an optional key that the response handler should use as its
     /// return type. If this is not configured, the response handler will
     /// use the entire `data` payload for deserialization.
-    pub fn data_field<Key>(mut self, key: Key) -> Self
+    pub fn data_field<Pointer>(mut self, pointer: Pointer) -> Self
     where
-        Key: Into<Cow<'static, str>>,
+        Pointer: Into<Cow<'static, str>>,
     {
-        self.response_field = Some(key.into());
+        self.response_field = Some(pointer.into());
         self
     }
 
@@ -88,9 +88,6 @@ impl GraphQLBuilder {
     where
         T: serde::de::DeserializeOwned,
     {
-        let payload = serde_json::to_string(&self.body).expect("This shouldn't fail");
-        tracing::warn!(target: Log::SlippiOnline, "PAYLOAD: {}", payload);
-
         let response = self
             .client
             .post(self.endpoint.as_ref())
@@ -149,15 +146,14 @@ where
 
     // Now attempt to extract the response payload. If we have it, then we'll attempt
     // to deserialize it to the expected response type.
-    let mut data = response.get_mut("data").ok_or(GraphQLError::MissingResponseData)?.take();
-
-    // Search further in the payload if we've set a key to use.
-    if let Some(field) = &request.response_field {
-        data = data
-            .get_mut(field.as_ref())
-            .ok_or_else(|| GraphQLError::MissingResponseField(field.to_string()))?
-            .take();
-    }
+    let data = if let Some(path) = &request.response_field {
+        response
+            .pointer_mut(path.as_ref())
+            .ok_or_else(|| GraphQLError::MissingResponseField(path.to_string()))?
+            .take()
+    } else {
+        response.get_mut("data").ok_or(GraphQLError::MissingResponseData)?.take()
+    };
 
     serde_json::from_value(data).map_err(GraphQLError::InvalidResponseJSON)
 }
