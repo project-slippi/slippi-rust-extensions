@@ -7,7 +7,7 @@ use dolphin_integrations::Log;
 use slippi_gg_api::{APIClient, GraphQLError};
 use slippi_user::UserManager;
 
-use super::{Message, RankInfo, RankManager, RankManagerData};
+use super::{FetchStatus, Message, RankInfo, RankManager, RankManagerData};
 
 #[derive(Debug)]
 pub struct RankInfoFetcher {
@@ -83,6 +83,8 @@ impl RankInfoFetcher {
                     rank_change: rank_change as i32,
                 });
 
+                rank_data.fetch_status = FetchStatus::Fetched;
+
                 // debug logs
                 let test = rank_data.current_rank.unwrap();
                 tracing::info!(target: Log::SlippiOnline, "rank: {0}", test.rank);
@@ -95,6 +97,10 @@ impl RankInfoFetcher {
             },
 
             Err(error) => {
+                // Set fetch status to error
+                let mut data = self.rank_data.lock().unwrap();
+                data.fetch_status = FetchStatus::Error;
+
                 tracing::error!(target: Log::SlippiOnline, ?error, "Failed to fetch rank");
             },
         }

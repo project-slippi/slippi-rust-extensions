@@ -49,10 +49,9 @@ typedef struct SlippiRustEXIConfig {
  * Rank info that we vend back to the Dolphin side of things.
  */
 typedef struct RustRankInfo {
+  int fetch_status;
   char rank;
   float rating_ordinal;
-  unsigned char global_placing;
-  unsigned char regional_placing;
   unsigned int rating_update_count;
   float rating_change;
   int rank_change;

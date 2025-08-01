@@ -58,7 +58,17 @@ pub enum Message {
 }
 
 #[derive(Debug, Clone, Default)]
+pub enum FetchStatus {
+    #[default]
+    NotFetched,
+    Fetching,
+    Fetched,
+    Error,
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct RankManagerData {
+    pub fetch_status: FetchStatus,
     pub current_rank: Option<RankInfo>,
     pub previous_rank: Option<RankInfo>,
 }
@@ -92,12 +102,21 @@ impl RankManager {
     }
 
     pub fn fetch_rank(&self) {
+        // Set fetch status to fetching
+        let mut data = self.rank_data.lock().unwrap();
+        data.fetch_status = FetchStatus::Fetching;
+
         // Send a message to the rank fetcher with the user's connect code
         let _ = self.tx.send(FetchRank);
     }
 
     pub fn get_rank(&self) -> Option<RankInfo> {
         self.rank_data.lock().unwrap().current_rank
+    }
+
+    pub fn get_rank_and_status(&self) -> (Option<RankInfo>, FetchStatus) {
+        let data = self.rank_data.lock().unwrap();
+        (data.current_rank.clone(), data.fetch_status.clone())
     }
 
     pub fn clear(&mut self) {
