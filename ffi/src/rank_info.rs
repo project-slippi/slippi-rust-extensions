@@ -31,13 +31,13 @@ pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> RustRan
         let rank = device.rank_manager.get_rank().unwrap_or_default();
 
         RustRankInfo {
-            rank: curr_rank.rank as c_char,
-            rating_ordinal: curr_rank.rating_ordinal as c_float,
-            global_placing: curr_rank.global_placing as c_uchar,
-            regional_placing: curr_rank.regional_placing as c_uchar,
-            rating_update_count: curr_rank.rating_update_count as c_uint,
-            rating_change: curr_rank.rating_change as c_float,
-            rank_change: curr_rank.rank_change as c_int,
+            rank: rank.rank as c_char,
+            rating_ordinal: rank.rating_ordinal as c_float,
+            global_placing: rank.global_placing as c_uchar,
+            regional_placing: rank.regional_placing as c_uchar,
+            rating_update_count: rank.rating_update_count as c_uint,
+            rating_change: rank.rating_change as c_float,
+            rank_change: rank.rank_change as c_int,
         }
     })
 }

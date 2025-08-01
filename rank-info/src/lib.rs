@@ -115,7 +115,7 @@ impl RankManager {
     }
 
     pub fn get_rank(&self) -> Option<RankInfo> {
-        self.rank_data.lock().unwrap().current_rank.clone()
+        self.rank_data.lock().unwrap().current_rank
     }
 
     pub fn clear(&mut self) {

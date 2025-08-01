@@ -29,9 +29,9 @@ impl RankInfoFetcher {
         match execute_rank_query(&self.api_client, connect_code) {
             Ok(response) => {
                 let mut rank_data = self.rank_data.lock().unwrap();
-                rank_data.previous_rank = rank_data.current_rank.clone();
+                rank_data.previous_rank = rank_data.current_rank;
 
-                let prev_rank_data = match rank_data.clone().previous_rank {
+                let prev_rank_data = match rank_data.previous_rank {
                     Some(rank) => rank,
                     None => RankInfo {
                         rank: 0,
@@ -94,7 +94,7 @@ impl RankInfoFetcher {
                 });
 
                 // debug logs
-                let test = rank_data.current_rank.clone().unwrap();
+                let test = rank_data.current_rank.unwrap();
                 tracing::info!(target: Log::SlippiOnline, "rank: {0}", test.rank);
                 tracing::info!(target: Log::SlippiOnline, "rating_ordinal: {0}", test.rating_ordinal);
                 tracing::info!(target: Log::SlippiOnline, "global_placing: {0}", test.global_placing);
