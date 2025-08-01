@@ -31,18 +31,8 @@ impl RankInfoFetcher {
                 let mut rank_data = self.rank_data.lock().unwrap();
                 rank_data.previous_rank = rank_data.current_rank;
 
-                let prev_rank_data = match rank_data.previous_rank {
-                    Some(rank) => rank,
-                    None => RankInfo {
-                        rank: 0,
-                        rating_ordinal: 0.0,
-                        global_placing: 0,
-                        regional_placing: 0,
-                        rating_update_count: 0,
-                        rank_change: 0,
-                        rating_change: 0.0,
-                    },
-                };
+                let prev_rank_data = rank_data.previous_rank.unwrap_or_default();
+
                 tracing::info!(target: Log::SlippiOnline, "prev rank: {0}", prev_rank_data.rank);
                 tracing::info!(target: Log::SlippiOnline, "prev rating: {0}", prev_rank_data.rating_ordinal);
                 tracing::info!(target: Log::SlippiOnline, "prev update count: {0}", prev_rank_data.rating_update_count);

@@ -1,6 +1,7 @@
 use std::ffi::{c_char, c_float, c_int, c_uchar, c_uint};
 
 use slippi_exi_device::SlippiEXIDevice;
+use slippi_rank_info::RankInfo;
 
 use crate::with_returning;
 
@@ -28,7 +29,11 @@ pub extern "C" fn slprs_fetch_rank_info(exi_device_instance_ptr: usize) {
 #[unsafe(no_mangle)]
 pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> RustRankInfo {
     with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, |device| {
-        let rank = device.rank_manager.get_rank().unwrap_or_default();
+        let rank = device.rank_manager.get_rank().unwrap_or({
+            let mut default = RankInfo::default();
+            default.rank = -1;
+            default
+        });
 
         RustRankInfo {
             rank: rank.rank as c_char,

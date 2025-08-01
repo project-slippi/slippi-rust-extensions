@@ -40,7 +40,7 @@ pub enum SlippiRank {
 }
 
 /// Represents a slice of rank information from the Slippi server.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct RankInfo {
     pub rank: i8,
     pub rating_ordinal: f32,
@@ -49,24 +49,6 @@ pub struct RankInfo {
     pub rating_update_count: u32,
     pub rating_change: f32,
     pub rank_change: i32,
-}
-
-impl Default for RankInfo {
-    /// A default rank info is an invalid rank info.
-    ///
-    /// (This enables slightly more concise code elsewhere, and we never
-    /// call `default` on this otherwise)
-    fn default() -> Self {
-        Self {
-            rank: -1,
-            rating_ordinal: 0.0,
-            global_placing: 0,
-            regional_placing: 0,
-            rating_update_count: 0,
-            rating_change: 0.0,
-            rank_change: 0,
-        }
-    }
 }
 
 #[derive(Debug)]
