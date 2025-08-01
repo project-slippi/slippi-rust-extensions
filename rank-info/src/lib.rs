@@ -1,13 +1,18 @@
-use crate::Message::*;
-use dolphin_integrations::Log;
-use fetcher::RankInfoFetcher;
-use slippi_gg_api::APIClient;
-use slippi_user::*;
+//! This module provides an interface for fetching and vending
+//! player rank updates for Dolphin to work with.
+
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+use dolphin_integrations::Log;
+use slippi_gg_api::APIClient;
+use slippi_user::*;
+
+use crate::Message::*;
+
 mod fetcher;
+use fetcher::RankInfoFetcher;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SlippiRank {
@@ -34,7 +39,8 @@ pub enum SlippiRank {
     Count,
 }
 
-#[derive(Debug, Clone, Default)]
+/// Represents a slice of rank information from the Slippi server.
+#[derive(Clone, Copy, Debug)]
 pub struct RankInfo {
     pub rank: i8,
     pub rating_ordinal: f32,
@@ -43,6 +49,24 @@ pub struct RankInfo {
     pub rating_update_count: u32,
     pub rating_change: f32,
     pub rank_change: i32,
+}
+
+impl Default for RankInfo {
+    /// A default rank info is an invalid rank info.
+    ///
+    /// (This enables slightly more concise code elsewhere, and we never
+    /// call `default` on this otherwise)
+    fn default() -> Self {
+        Self {
+            rank: -1,
+            rating_ordinal: 0.0,
+            global_placing: 0,
+            regional_placing: 0,
+            rating_update_count: 0,
+            rating_change: 0.0,
+            rank_change: 0,
+        }
+    }
 }
 
 #[derive(Debug)]

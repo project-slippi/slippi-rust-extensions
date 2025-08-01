@@ -28,26 +28,16 @@ pub extern "C" fn slprs_fetch_rank_info(exi_device_instance_ptr: usize) {
 #[unsafe(no_mangle)]
 pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> RustRankInfo {
     with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, |device| {
-        match device.rank_manager.get_rank() {
-            Some(curr_rank) => RustRankInfo {
-                rank: curr_rank.rank as c_char,
-                rating_ordinal: curr_rank.rating_ordinal as c_float,
-                global_placing: curr_rank.global_placing as c_uchar,
-                regional_placing: curr_rank.regional_placing as c_uchar,
-                rating_update_count: curr_rank.rating_update_count as c_uint,
-                rating_change: curr_rank.rating_change as c_float,
-                rank_change: curr_rank.rank_change as c_int,
-            },
+        let rank = device.rank_manager.get_rank().unwrap_or_default();
 
-            None => RustRankInfo {
-                rank: -1 as c_char, // Send invalid rank if data is empty
-                rating_ordinal: 0.0 as c_float,
-                global_placing: 0 as c_uchar,
-                regional_placing: 0 as c_uchar,
-                rating_update_count: 0 as c_uint,
-                rating_change: 0.0 as c_float,
-                rank_change: 0 as c_int,
-            },
+        RustRankInfo {
+            rank: curr_rank.rank as c_char,
+            rating_ordinal: curr_rank.rating_ordinal as c_float,
+            global_placing: curr_rank.global_placing as c_uchar,
+            regional_placing: curr_rank.regional_placing as c_uchar,
+            rating_update_count: curr_rank.rating_update_count as c_uint,
+            rating_change: curr_rank.rating_change as c_float,
+            rank_change: curr_rank.rank_change as c_int,
         }
     })
 }

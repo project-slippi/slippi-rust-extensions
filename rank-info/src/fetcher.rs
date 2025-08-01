@@ -136,7 +136,7 @@ pub fn run(fetcher: RankInfoFetcher, receiver: Receiver<Message>) {
     }
 }
 
-#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, Default, serde::Deserialize)]
 pub struct RankInfoAPIResponse {
     #[serde(alias = "ratingOrdinal")]
     pub rating_ordinal: f32,
@@ -144,10 +144,10 @@ pub struct RankInfoAPIResponse {
     #[serde(alias = "ratingUpdateCount")]
     pub rating_update_count: u32,
 
-    #[serde(alias = "dailyGlobalPlacement", default)]
+    #[serde(alias = "dailyGlobalPlacement")]
     pub daily_global_placement: Option<u8>,
 
-    #[serde(alias = "dailyRegionalPlacement", default)]
+    #[serde(alias = "dailyRegionalPlacement")]
     pub daily_regional_placement: Option<u8>,
 }
 
