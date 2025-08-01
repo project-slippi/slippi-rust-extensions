@@ -29,6 +29,12 @@ impl Resolver for Ipv4Resolver {
     }
 }
 
+/// Default timeout that we use on client types. Extracted
+/// so that the GraphQLBuilder can also call it.
+pub(crate) fn default_timeout() -> Duration {
+    Duration::from_millis(5000)
+}
+
 /// A wrapper type that simply dereferences to a `ureq::Agent`.
 ///
 /// It's extracted purely for ease of debugging, and for segmenting
@@ -64,7 +70,7 @@ impl APIClient {
         let http_client = AgentBuilder::new()
             .resolver(Ipv4Resolver)
             .max_idle_connections(5)
-            .timeout(Duration::from_millis(5000))
+            .timeout(default_timeout())
             .user_agent(&format!("SlippiDolphin/{} ({}) (Rust)", _build, slippi_semver))
             .build();
 

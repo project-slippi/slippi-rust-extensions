@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::time::Duration;
 
 use serde_json::Value;
 use thiserror::Error;
@@ -44,6 +45,7 @@ pub struct GraphQLBuilder {
     endpoint: Cow<'static, str>,
     response_field: Option<Cow<'static, str>>,
     body: HashMap<&'static str, Value>,
+    request_timeout: Duration,
 }
 
 impl GraphQLBuilder {
@@ -57,7 +59,15 @@ impl GraphQLBuilder {
             endpoint: Cow::Borrowed("https://internal.slippi.gg/graphql"),
             response_field: None,
             body,
+            request_timeout: super::default_timeout(),
         }
+    }
+
+    /// Sets a custom timeout on this call. If not set, then this will
+    /// default to whatever the `APIClient` currently has set.
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.request_timeout = timeout;
+        self
     }
 
     /// Sets optional `variables` for the GraphQL payload.
@@ -91,6 +101,7 @@ impl GraphQLBuilder {
         let response = self
             .client
             .post(self.endpoint.as_ref())
+            .timeout(self.request_timeout)
             .send_json(&self.body)
             .map_err(GraphQLError::Request)?
             .into_string()
