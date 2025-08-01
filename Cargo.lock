@@ -1232,6 +1232,7 @@ dependencies = [
  "slippi-game-reporter",
  "slippi-gg-api",
  "slippi-jukebox",
+ "slippi-rank-info",
  "slippi-user",
  "tracing",
 ]
@@ -1255,6 +1256,10 @@ dependencies = [
 name = "slippi-gg-api"
 version = "0.1.0"
 dependencies = [
+ "dolphin-integrations",
+ "serde",
+ "serde_json",
+ "thiserror",
  "tracing",
  "ureq",
 ]
@@ -1267,6 +1272,19 @@ dependencies = [
  "hps_decode",
  "rodio",
  "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "slippi-rank-info"
+version = "0.1.0"
+dependencies = [
+ "dolphin-integrations",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "slippi-gg-api",
+ "slippi-user",
  "tracing",
 ]
 
@@ -1292,6 +1310,7 @@ dependencies = [
  "slippi-exi-device",
  "slippi-game-reporter",
  "slippi-jukebox",
+ "slippi-rank-info",
  "slippi-user",
  "tracing",
 ]
