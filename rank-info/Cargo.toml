@@ -1,16 +1,21 @@
 [package]
 name = "slippi-rank-info"
+description = "Handles fetching and updating player rank."
 version = "0.1.0"
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors = [
+    "Slippi Team",
+    "Aidan Walz <https://github.com/walz0>", 
+    "Ryan McGrath <ryan@rymc.io>",
+]
+edition = "2024"
+publish = false
 
 [dependencies]
 serde = { workspace = true }
 tracing = { workspace = true }
-dolphin-integrations = { path = "../dolphin" }
 serde_json = { workspace = true }
 serde_repr = { workspace = true }
-thiserror = { workspace = true }
+
+dolphin-integrations = { path = "../dolphin" }
 slippi-gg-api = { path = "../slippi-gg-api" }
 slippi-user = { path = "../user" }

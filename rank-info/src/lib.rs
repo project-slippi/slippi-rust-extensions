@@ -3,7 +3,7 @@ use dolphin_integrations::Log;
 use fetcher::RankInfoFetcher;
 use slippi_gg_api::APIClient;
 use slippi_user::*;
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::thread;
 

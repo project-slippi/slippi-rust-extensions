@@ -5,6 +5,9 @@ use std::time::Duration;
 
 use ureq::{Agent, AgentBuilder, Resolver};
 
+mod graphql;
+pub use graphql::{GraphQLBuilder, GraphQLError};
+
 /// Re-export `ureq::Error` for simplicity.
 pub type Error = ureq::Error;
 
@@ -66,6 +69,14 @@ impl APIClient {
             .build();
 
         Self(http_client)
+    }
+
+    /// Returns a type that can be used to construct GraphQL requests.
+    pub fn graphql<Query>(&self, query: Query) -> GraphQLBuilder
+    where
+        Query: Into<String>,
+    {
+        GraphQLBuilder::new(self.clone(), query.into())
     }
 }
 
