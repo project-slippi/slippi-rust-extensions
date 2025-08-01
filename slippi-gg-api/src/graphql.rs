@@ -11,9 +11,6 @@ use super::APIClient;
 /// Various errors that can happen during a GraphQL request.
 #[derive(Debug, Error)]
 pub enum GraphQLError {
-    #[error("Failed to pretty-print the returned errors.")]
-    FailedErrorFormatting,
-
     #[error("Expected {0} data key, but returned payload has none.")]
     MissingResponseField(String),
 
