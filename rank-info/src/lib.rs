@@ -12,32 +12,9 @@ use slippi_user::UserManager;
 use crate::Message::*;
 
 mod fetcher;
-use fetcher::RankInfoFetcher;
+use fetcher::{Message, listen};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SlippiRank {
-    Unranked,
-    Bronze1,
-    Bronze2,
-    Bronze3,
-    Silver1,
-    Silver2,
-    Silver3,
-    Gold1,
-    Gold2,
-    Gold3,
-    Platinum1,
-    Platinum2,
-    Platinum3,
-    Diamond1,
-    Diamond2,
-    Diamond3,
-    Master1,
-    Master2,
-    Master3,
-    Grandmaster,
-    Count,
-}
+mod rank;
 
 /// Represents a slice of rank information from the Slippi server.
 #[derive(Clone, Copy, Debug, Default)]
@@ -51,13 +28,11 @@ pub struct RankInfo {
     pub rank_change: i32,
 }
 
-#[derive(Debug)]
-pub enum Message {
-    FetchRank,
-    RankFetcherDropped,
-}
-
-#[derive(Debug, Clone, Default)]
+/// Represents current state of the rank flow.
+///
+/// Note that we mark this as C-compatible due to FFI usage.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Default)]
 pub enum FetchStatus {
     #[default]
     NotFetched,
@@ -67,7 +42,7 @@ pub enum FetchStatus {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct RankManagerData {
+struct RankManagerData {
     pub fetch_status: FetchStatus,
     pub current_rank: Option<RankInfo>,
     pub previous_rank: Option<RankInfo>,
@@ -80,19 +55,23 @@ pub struct RankManager {
 }
 
 impl RankManager {
+    /// Creates a new `RankManager`. This spawns a background thread which listens
+    /// for instructions and operates accordingly (e.g fetching rank updates).
     pub fn new(api_client: APIClient, user_manager: UserManager) -> Self {
-        tracing::info!(target: Log::SlippiOnline, "Initializing Slippi Rank Manager");
+        tracing::info!(target: Log::SlippiOnline, "Initializing RankManager");
+
         let (tx, rx) = channel::<Message>();
         let rank_data = Arc::new(Mutex::new(RankManagerData::default()));
+        let api_client_handle = api_client.clone();
+        let user_manager_handle = user_manager.clone();
+        let rank_data_handle = rank_data.clone();
 
-        let fetcher = RankInfoFetcher::new(api_client.clone(), user_manager.clone(), rank_data.clone());
-
-        let _fetcher_thread = thread::Builder::new()
-            .name("RankInfoFetcherThread".into())
+        let _network_thread = thread::Builder::new()
+            .name("RankManagerNetworkThread".into())
             .spawn(move || {
-                fetcher::run(fetcher, rx);
+                listen(api_client_handle, user_manager_handle, rank_data_handle, rx);
             })
-            .expect("Failed to spawn RankInfoFetcherThread.");
+            .expect("Failed to spawn RankManagerNetworkThread.");
 
         Self { tx, rank_data }
     }
@@ -119,70 +98,6 @@ impl RankManager {
         let mut data = self.rank_data.lock().unwrap();
         data.current_rank = None;
         data.previous_rank = None;
-    }
-
-    pub fn decide_rank(rating_ordinal: f32, global_placing: u8, regional_placing: u8, rating_update_count: u32) -> SlippiRank {
-        if rating_update_count < 5 {
-            return SlippiRank::Unranked;
-        }
-        if rating_ordinal > 0.0 && rating_ordinal <= 765.42 {
-            return SlippiRank::Bronze1;
-        }
-        if rating_ordinal > 765.43 && rating_ordinal <= 913.71 {
-            return SlippiRank::Bronze2;
-        }
-        if rating_ordinal > 913.72 && rating_ordinal <= 1054.86 {
-            return SlippiRank::Bronze3;
-        }
-        if rating_ordinal > 1054.87 && rating_ordinal <= 1188.87 {
-            return SlippiRank::Silver1;
-        }
-        if rating_ordinal > 1188.88 && rating_ordinal <= 1315.74 {
-            return SlippiRank::Silver2;
-        }
-        if rating_ordinal > 1315.75 && rating_ordinal <= 1435.47 {
-            return SlippiRank::Silver3;
-        }
-        if rating_ordinal > 1435.48 && rating_ordinal <= 1548.06 {
-            return SlippiRank::Gold1;
-        }
-        if rating_ordinal > 1548.07 && rating_ordinal <= 1653.51 {
-            return SlippiRank::Gold2;
-        }
-        if rating_ordinal > 1653.52 && rating_ordinal <= 1751.82 {
-            return SlippiRank::Gold3;
-        }
-        if rating_ordinal > 1751.83 && rating_ordinal <= 1842.99 {
-            return SlippiRank::Platinum1;
-        }
-        if rating_ordinal > 1843.0 && rating_ordinal <= 1927.02 {
-            return SlippiRank::Platinum2;
-        }
-        if rating_ordinal > 1927.03 && rating_ordinal <= 2003.91 {
-            return SlippiRank::Platinum3;
-        }
-        if rating_ordinal > 2003.92 && rating_ordinal <= 2073.66 {
-            return SlippiRank::Diamond1;
-        }
-        if rating_ordinal > 2073.67 && rating_ordinal <= 2136.27 {
-            return SlippiRank::Diamond2;
-        }
-        if rating_ordinal > 2136.28 && rating_ordinal <= 2191.74 {
-            return SlippiRank::Diamond3;
-        }
-        if rating_ordinal >= 2191.75 && global_placing > 0 && regional_placing > 0 {
-            return SlippiRank::Grandmaster;
-        }
-        if rating_ordinal > 2191.75 && rating_ordinal <= 2274.99 {
-            return SlippiRank::Master1;
-        }
-        if rating_ordinal > 2275.0 && rating_ordinal <= 2350.0 {
-            return SlippiRank::Master2;
-        }
-        if rating_ordinal > 2350.0 {
-            return SlippiRank::Master3;
-        }
-        SlippiRank::Unranked
     }
 }
 
