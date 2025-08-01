@@ -88,6 +88,9 @@ impl GraphQLBuilder {
     where
         T: serde::de::DeserializeOwned,
     {
+        let payload = serde_json::to_string(&self.body).expect("This shouldn't fail");
+        tracing::warn!(target: Log::SlippiOnline, "PAYLOAD: {}", payload);
+
         let response = self
             .client
             .post(self.endpoint.as_ref())
