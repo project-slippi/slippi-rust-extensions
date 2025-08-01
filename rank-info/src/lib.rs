@@ -87,10 +87,6 @@ impl RankManager {
 
         let fetcher = RankInfoFetcher::new(api_client.clone(), user_manager.clone(), rank_data.clone());
 
-        // Fetch rank on boot (this doesnt work, this is when dolphin opens there is no user)
-        let connect_code = user_manager.get(|user| user.connect_code.clone());
-        let _ = fetcher.fetch_user_rank(&connect_code);
-
         let _fetcher_thread = thread::Builder::new()
             .name("RankInfoFetcherThread".into())
             .spawn(move || {
