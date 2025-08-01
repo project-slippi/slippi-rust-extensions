@@ -45,6 +45,9 @@ typedef struct SlippiRustEXIConfig {
   void (*osd_add_msg_fn)(const char*, uint32_t, uint32_t);
 } SlippiRustEXIConfig;
 
+/**
+ * Rank info that we vend back to the Dolphin side of things.
+ */
 typedef struct RustRankInfo {
   char rank;
   float rating_ordinal;
