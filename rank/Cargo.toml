@@ -1,5 +1,5 @@
 [package]
-name = "slippi-rank-info"
+name = "slippi-rank"
 description = "Handles fetching and updating (client side knowledge of) player rank."
 version = "0.1.0"
 authors = [

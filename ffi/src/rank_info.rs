@@ -1,7 +1,7 @@
 use std::ffi::{c_char, c_float, c_int, c_uint};
 
 use slippi_exi_device::SlippiEXIDevice;
-use slippi_rank_info::RankInfo;
+use slippi_rank::RankInfo;
 
 use crate::with_returning;
 

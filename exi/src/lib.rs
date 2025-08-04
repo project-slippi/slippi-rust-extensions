@@ -9,7 +9,7 @@ use dolphin_integrations::Log;
 use slippi_game_reporter::GameReporter;
 use slippi_gg_api::APIClient;
 use slippi_jukebox::Jukebox;
-use slippi_rank_info::RankManager;
+use slippi_rank::RankManager;
 use slippi_user::UserManager;
 
 mod config;

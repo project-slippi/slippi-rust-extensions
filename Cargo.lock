@@ -1232,7 +1232,7 @@ dependencies = [
  "slippi-game-reporter",
  "slippi-gg-api",
  "slippi-jukebox",
- "slippi-rank-info",
+ "slippi-rank",
  "slippi-user",
  "tracing",
 ]
@@ -1276,7 +1276,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "slippi-rank-info"
+name = "slippi-rank"
 version = "0.1.0"
 dependencies = [
  "dolphin-integrations",
@@ -1310,7 +1310,7 @@ dependencies = [
  "slippi-exi-device",
  "slippi-game-reporter",
  "slippi-jukebox",
- "slippi-rank-info",
+ "slippi-rank",
  "slippi-user",
  "tracing",
 ]
