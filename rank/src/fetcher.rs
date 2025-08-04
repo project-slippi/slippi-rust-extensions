@@ -178,8 +178,6 @@ fn calculate_rank(rank_data: &Arc<Mutex<RankData>>, response: RankInfoAPIRespons
         rank_change: rank_change as i32,
     });
 
-    rank_data.fetch_status = FetchStatus::Fetched;
-
     // debug logs
     let test = rank_data.current_rank.unwrap();
     tracing::info!(target: Log::SlippiOnline, "rank: {0}", test.rank);
