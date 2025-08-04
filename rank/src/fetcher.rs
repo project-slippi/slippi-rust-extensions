@@ -1,11 +1,11 @@
 use std::sync::{Arc, Mutex};
-use std::sync::mpsc::Receiver;
+use std::thread::sleep;
+use std::time::Duration;
 
 use serde_json::json;
 
 use dolphin_integrations::Log;
 use slippi_gg_api::{APIClient, GraphQLError};
-use slippi_user::UserManager;
 
 /// Represents a slice of rank information from the Slippi server.
 #[derive(Clone, Copy, Debug, Default)]
@@ -47,58 +47,39 @@ fn set_status(data: &Mutex<RankData>, status: FetchStatus) {
     lock.fetch_status = status;
 }
 
-/// Any events we're listening for in the background thread.
-#[derive(Clone, Copy, Debug)]
-pub enum Message {
-    FetchRank,
-    RankManagerDropped,
-}
-
-/// The core loop of the background thread that handles network requests
+/// The core of the background thread that handles network requests
 /// for checking player rank updates.
-pub fn listen(
-    api_client: APIClient,
-    user_manager: UserManager,
-    rank_data: Arc<Mutex<RankData>>,
-    receiver: Receiver<Message>,
-) {
+pub fn run(api_client: APIClient, connect_code: String, rank_data: Arc<Mutex<RankData>>) {
+    let mut retry_index = 0;
+
     loop {
-        match receiver.recv() {
-            Ok(Message::FetchRank) => {
-                let connect_code = user_manager.get(|user| user.connect_code.clone());
+        set_status(&rank_data, FetchStatus::Fetching);
 
-                set_status(&rank_data, FetchStatus::Fetching);
-
-                match fetch_rank(&api_client, &connect_code) {
-                    Ok(response) => {
-                        calculate_rank(&rank_data, response);
-                        set_status(&rank_data, FetchStatus::Fetched);
-                    },
-
-                    Err(error) => {
-                        set_status(&rank_data, FetchStatus::Error);
-
-                        tracing::error!(
-                            target: Log::SlippiOnline,
-                            ?error,
-                            "Failed to fetch rank"
-                        );
-                    },
-                }
-            },
-
-            Ok(Message::RankManagerDropped) => {
-                tracing::info!(target: Log::SlippiOnline, "RankManagerNetworkThread ending");
+        match fetch_rank(&api_client, &connect_code) {
+            Ok(response) => {
+                calculate_rank(&rank_data, response);
+                set_status(&rank_data, FetchStatus::Fetched);
+                break;
             },
 
             Err(error) => {
                 tracing::error!(
                     target: Log::SlippiOnline,
                     ?error,
-                    "Failed to receive Message, thread will exit"
+                    "Failed to fetch rank"
                 );
 
-                break;
+                retry_index += 1;
+
+                // Only set the error flag after multiple retries have failed(?)
+                if retry_index == 3 {
+                    set_status(&rank_data, FetchStatus::Error);
+                    break;
+                }
+
+                // @Fizzi pls look
+                let duration = Duration::from_secs(1);
+                sleep(duration);
             },
         }
     }
