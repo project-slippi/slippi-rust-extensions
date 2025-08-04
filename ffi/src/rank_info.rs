@@ -20,7 +20,7 @@ pub struct RustRankInfo {
 #[unsafe(no_mangle)]
 pub extern "C" fn slprs_fetch_rank_info(exi_device_instance_ptr: usize) {
     with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, |device| {
-        device.rank_manager.fetch_rank();
+        device.rank_manager.fetch();
     })
 }
 
@@ -28,7 +28,7 @@ pub extern "C" fn slprs_fetch_rank_info(exi_device_instance_ptr: usize) {
 #[unsafe(no_mangle)]
 pub extern "C" fn slprs_get_rank_info(exi_device_instance_ptr: usize) -> RustRankInfo {
     with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, |device| {
-        let (rank_opt, fetch_status) = device.rank_manager.get_rank_and_status();
+        let (rank_opt, fetch_status) = device.rank_manager.current_rank_and_status();
         let rank = rank_opt.unwrap_or({
             let mut default = RankInfo::default();
             default.rank = -1;

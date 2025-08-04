@@ -1,5 +1,5 @@
-use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
+use std::sync::mpsc::Receiver;
 
 use serde_json::json;
 
@@ -7,13 +7,51 @@ use dolphin_integrations::Log;
 use slippi_gg_api::{APIClient, GraphQLError};
 use slippi_user::UserManager;
 
-use super::{FetchStatus, RankInfo, RankManagerData};
+/// Represents a slice of rank information from the Slippi server.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RankInfo {
+    pub rank: i8,
+    pub rating_ordinal: f32,
+    pub global_placing: u8,
+    pub regional_placing: u8,
+    pub rating_update_count: u32,
+    pub rating_change: f32,
+    pub rank_change: i32,
+}
+
+/// Represents current state of the rank flow.
+///
+/// Note that we mark this as C-compatible due to FFI usage.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Default)]
+pub enum FetchStatus {
+    #[default]
+    NotFetched,
+    Fetching,
+    Fetched,
+    Error,
+}
+
+/// Internal state representing player rank data, as well as the current
+/// state of any network operations.
+#[derive(Debug, Clone, Default)]
+pub struct RankData {
+    pub fetch_status: FetchStatus,
+    pub current_rank: Option<RankInfo>,
+    pub previous_rank: Option<RankInfo>,
+}
+
+/// Helper method for setting the fetch status.
+fn set_status(data: &Mutex<RankData>, status: FetchStatus) {
+    let mut lock = data.lock().unwrap();
+    lock.fetch_status = status;
+}
 
 /// Any events we're listening for in the background thread.
 #[derive(Clone, Copy, Debug)]
 pub enum Message {
     FetchRank,
-    RankFetcherDropped,
+    RankManagerDropped,
 }
 
 /// The core loop of the background thread that handles network requests
@@ -21,7 +59,7 @@ pub enum Message {
 pub fn listen(
     api_client: APIClient,
     user_manager: UserManager,
-    rank_data: Arc<Mutex<RankManagerData>>,
+    rank_data: Arc<Mutex<RankData>>,
     receiver: Receiver<Message>,
 ) {
     loop {
@@ -29,15 +67,16 @@ pub fn listen(
             Ok(Message::FetchRank) => {
                 let connect_code = user_manager.get(|user| user.connect_code.clone());
 
+                set_status(&rank_data, FetchStatus::Fetching);
+
                 match fetch_rank(&api_client, &connect_code) {
                     Ok(response) => {
                         calculate_rank(&rank_data, response);
+                        set_status(&rank_data, FetchStatus::Fetched);
                     },
 
                     Err(error) => {
-                        // Set fetch status to error
-                        let mut data = rank_data.lock().unwrap();
-                        data.fetch_status = FetchStatus::Error;
+                        set_status(&rank_data, FetchStatus::Error);
 
                         tracing::error!(
                             target: Log::SlippiOnline,
@@ -48,8 +87,8 @@ pub fn listen(
                 }
             },
 
-            Ok(Message::RankFetcherDropped) => {
-                tracing::info!(target: Log::SlippiOnline, "RankManagerNetworkThread dropped");
+            Ok(Message::RankManagerDropped) => {
+                tracing::info!(target: Log::SlippiOnline, "RankManagerNetworkThread ending");
             },
 
             Err(error) => {
@@ -108,7 +147,7 @@ fn fetch_rank(api_client: &APIClient, connect_code: &str) -> Result<RankInfoAPIR
 }
 
 /// Calculates and stores any rank adjustments.
-fn calculate_rank(rank_data: &Arc<Mutex<RankManagerData>>, response: RankInfoAPIResponse) {
+fn calculate_rank(rank_data: &Arc<Mutex<RankData>>, response: RankInfoAPIResponse) {
     let mut rank_data = rank_data.lock().unwrap();
     rank_data.previous_rank = rank_data.current_rank;
 
