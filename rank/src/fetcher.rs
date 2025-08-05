@@ -57,7 +57,20 @@ pub fn run(api_client: APIClient, connect_code: String, rank_data: Arc<Mutex<Ran
 
         match fetch_rank(&api_client, &connect_code) {
             Ok(response) => {
-                calculate_rank(&rank_data, response);
+                let rating_updated = calculate_rank(&rank_data, response);
+
+                // If the rating hasn't been updated, we want to retry. This could
+                // happen in the case where a match is a little late to be reported
+                // on the server. This hopefully gives some time for our rank update
+                // to be processed.
+                if !rating_updated {
+                    retry_index += 1;
+                    if retry_index < 3 {
+                        sleep(Duration::from_secs(2));
+                        continue;
+                    }
+                }
+
                 set_status(&rank_data, FetchStatus::Fetched);
                 break;
             },
@@ -72,12 +85,11 @@ pub fn run(api_client: APIClient, connect_code: String, rank_data: Arc<Mutex<Ran
                 retry_index += 1;
 
                 // Only set the error flag after multiple retries have failed(?)
-                if retry_index == 3 {
+                if retry_index >= 3 {
                     set_status(&rank_data, FetchStatus::Error);
                     break;
                 }
 
-                // @Fizzi pls look
                 let duration = Duration::from_secs(1);
                 sleep(duration);
             },
@@ -128,7 +140,8 @@ fn fetch_rank(api_client: &APIClient, connect_code: &str) -> Result<RankInfoAPIR
 }
 
 /// Calculates and stores any rank adjustments.
-fn calculate_rank(rank_data: &Arc<Mutex<RankData>>, response: RankInfoAPIResponse) {
+/// Returns true if the rating was updated, false otherwise.
+fn calculate_rank(rank_data: &Arc<Mutex<RankData>>, response: RankInfoAPIResponse) -> bool {
     let mut rank_data = rank_data.lock().unwrap();
     rank_data.previous_rank = rank_data.current_rank;
 
@@ -187,4 +200,7 @@ fn calculate_rank(rank_data: &Arc<Mutex<RankData>>, response: RankInfoAPIRespons
     tracing::info!(target: Log::SlippiOnline, "rating_update_count: {0}", test.rating_update_count);
     tracing::info!(target: Log::SlippiOnline, "rating_change: {0}", test.rating_change);
     tracing::info!(target: Log::SlippiOnline, "rank_change: {0}", test.rank_change);
+
+    // Return true if the rating_update_count has changed
+    response.rating_update_count != prev_rank_data.rating_update_count
 }
