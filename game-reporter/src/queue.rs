@@ -126,10 +126,10 @@ pub fn report_match_status(api_client: &APIClient, uid: String, match_id: String
     match api_client
         .graphql(mutation)
         .variables(variables)
-        .data_field("reportOnlineMatchStatus")
-        .send::<String>()
+        .data_field("/data/reportOnlineMatchStatus")
+        .send::<bool>()
     {
-        Ok(value) if value == "true" => {
+        Ok(value) if value => {
             tracing::info!(target: Log::SlippiOnline, "Successfully executed status report request: {status}")
         },
         Ok(value) => tracing::error!(target: Log::SlippiOnline, ?value, "Error executing status report request: {status}"),
@@ -299,7 +299,7 @@ fn try_send_next_report(
     let response: ReportResponse = api_client
         .graphql(mutation)
         .variables(variables)
-        .data_field("reportOnlineGame")
+        .data_field("/data/reportOnlineGame")
         .send()
         .map_err(|error| ReportSendError {
             is_last_attempt,
