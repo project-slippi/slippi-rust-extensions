@@ -52,9 +52,10 @@ pub fn set_status(data: &Mutex<RankData>, status: FetchStatus) {
 pub fn run(api_client: APIClient, connect_code: String, rank_data: Arc<Mutex<RankData>>) {
     let mut retry_index = 0;
 
-    loop {
-        set_status(&rank_data, FetchStatus::Fetching);
+    // Fetching state is set by the function initiating this async process to make
+    // sure the status is set synchronously in case of any quick reads after the fetch
 
+    loop {
         match fetch_rank(&api_client, &connect_code) {
             Ok(response) => {
                 let rating_updated = calculate_rank(&rank_data, response);
