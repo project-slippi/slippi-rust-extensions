@@ -54,6 +54,9 @@ impl RankManager {
         let connect_code = self.user_manager.get(|user| user.connect_code.clone());
         let data = self.data.clone();
 
+        // Set the fetching status synchronously so the game will immediately see it
+        fetcher::set_status(&data, FetchStatus::Fetching);
+
         let background_thread = thread::Builder::new()
             .name("RankRequestThread".into())
             .spawn(move || {

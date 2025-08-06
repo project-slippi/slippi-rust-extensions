@@ -42,7 +42,7 @@ pub struct RankData {
 }
 
 /// Helper method for setting the fetch status.
-fn set_status(data: &Mutex<RankData>, status: FetchStatus) {
+pub fn set_status(data: &Mutex<RankData>, status: FetchStatus) {
     let mut lock = data.lock().unwrap();
     lock.fetch_status = status;
 }
