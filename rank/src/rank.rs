@@ -30,6 +30,8 @@ pub fn decide(rating_ordinal: f32, global_placing: u8, regional_placing: u8, rat
         return SlippiRank::Unranked;
     }
 
+    // TODO: It is technically possible, though unlikely, for rating_ordinal to be negative.
+    // In that case, this function would not show the rank correctly.
     if rating_ordinal > 0.0 && rating_ordinal <= 765.42 {
         return SlippiRank::Bronze1;
     }
