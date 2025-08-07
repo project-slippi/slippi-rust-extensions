@@ -64,6 +64,35 @@ impl RankManager {
         *thread = Some(background_thread);
     }
 
+    /// Fetches the match result for a given match ID.
+    ///
+    /// This will spin up a background thread to fetch the match result
+    /// and update the rank data accordingly. If a background thread is already
+    /// running, this will not start a new one.
+    pub fn fetch_match_result(&self, match_id: String) {
+        let mut thread = self.thread.lock().unwrap();
+
+        // If a user leaves and re-enters the CSS while a request is ongoing, we
+        // don't want to fire up multiple threads and issue multiple requests: limit
+        // things to one background thread at a time.
+        if thread.is_some() && !thread.as_ref().unwrap().is_finished() {
+            return;
+        }
+
+        let api_client = self.api_client.clone();
+        let (uid, play_key) = self.user_manager.get(|user| (user.uid.clone(), user.play_key.clone()));
+        let data = self.data.clone();
+
+        let background_thread = thread::Builder::new()
+            .name("RankMatchResultThread".into())
+            .spawn(move || {
+                fetcher::run_match_result(api_client, match_id, uid, play_key, data);
+            })
+            .expect("Failed to spawn RankMatchResultThread.");
+
+        *thread = Some(background_thread);
+    }
+
     /// Gets the current rank state (even if blank), along with the current status of
     /// any ongoing fetch operations.
     pub fn current_rank_and_status(&self) -> (Option<RankInfo>, FetchStatus) {
