@@ -3,6 +3,7 @@ use std::ffi::{c_char, c_float, c_int, c_uint};
 use slippi_exi_device::SlippiEXIDevice;
 use slippi_rank::RankInfo;
 
+use crate::c_str_to_string;
 use crate::with_returning;
 
 /// Rank info that we vend back to the Dolphin side of things.
@@ -21,6 +22,16 @@ pub struct RustRankInfo {
 pub extern "C" fn slprs_fetch_rank_info(exi_device_instance_ptr: usize) {
     with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, |device| {
         device.rank_manager.fetch();
+    })
+}
+
+/// Fetches the result of a recently played match via its ID.
+#[unsafe(no_mangle)]
+pub extern "C" fn slprs_fetch_match_result(exi_device_instance_ptr: usize, match_id: *const c_char) {
+    with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, |device| {
+        let fn_name = "slprs_fetch_match_result";
+        let match_id = c_str_to_string(match_id, fn_name, "match_id");
+        device.rank_manager.fetch_match_result(match_id);
     })
 }
 

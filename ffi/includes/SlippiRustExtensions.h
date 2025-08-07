@@ -275,6 +275,11 @@ void slprs_mainline_logging_update_log_level(int level);
 void slprs_fetch_rank_info(uintptr_t exi_device_instance_ptr);
 
 /**
+ * Fetches the result of a recently played match via its ID.
+ */
+void slprs_fetch_match_result(uintptr_t exi_device_instance_ptr, const char *match_id);
+
+/**
  * Gets the most recently fetched rank information of the user currently logged in.
  */
 struct RustRankInfo slprs_get_rank_info(uintptr_t exi_device_instance_ptr);

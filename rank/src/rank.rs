@@ -25,7 +25,7 @@ pub enum SlippiRank {
 }
 
 /// Determines the current `SlippiRank` given the provided values.
-pub fn decide(rating_ordinal: f32, global_placing: u8, regional_placing: u8, rating_update_count: u32) -> SlippiRank {
+pub fn decide(rating_ordinal: f32, global_placing: u16, regional_placing: u16, rating_update_count: u32) -> SlippiRank {
     if rating_update_count < 5 {
         return SlippiRank::Unranked;
     }
