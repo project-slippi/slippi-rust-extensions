@@ -3,7 +3,6 @@
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::thread;
 
 use slippi_gg_api::APIClient;
 
@@ -13,9 +12,9 @@ pub use chat::DEFAULT_CHAT_MESSAGES;
 mod direct_codes;
 use direct_codes::DirectCodes;
 
-mod rank;
-use rank::RankData;
-pub use rank::{FetchStatus, RankInfo};
+mod rank_fetcher;
+pub use rank_fetcher::RankFetchStatus;
+use rank_fetcher::RankFetcher;
 
 mod watcher;
 use watcher::UserInfoWatcher;
@@ -42,18 +41,6 @@ pub struct UserInfo {
 
     #[serde(alias = "chatMessages")]
     pub chat_messages: Option<Vec<String>>,
-
-    #[serde(alias = "ranked_ordinal")]
-    pub ranked_ordinal: f32,
-
-    #[serde(alias = "ranked_global_placing")]
-    pub ranked_global_placing: u16,
-
-    #[serde(alias = "ranked_local_placing")]
-    pub ranked_local_placing: u16,
-
-    #[serde(alias = "ranked_rating_update_count")]
-    pub ranked_rating_update_count: u32,
 }
 
 impl UserInfo {
@@ -67,6 +54,18 @@ impl UserInfo {
     }
 }
 
+/// Represents a slice of rank information from the Slippi server.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RankInfo {
+    pub rank: i8,
+    pub rating_ordinal: f32,
+    pub global_placing: u16,
+    pub regional_placing: u16,
+    pub rating_update_count: u32,
+    pub rating_change: f32,
+    pub rank_change: i8,
+}
+
 /// A thread-safe handle for the User Manager. This uses an `Arc` under the hood, so you don't
 /// need to do so if you're storing it.
 ///
@@ -77,13 +76,13 @@ impl UserInfo {
 pub struct UserManager {
     api_client: APIClient,
     user: Arc<Mutex<UserInfo>>,
+    rank: Arc<Mutex<RankInfo>>,
     user_json_path: Arc<PathBuf>,
     pub direct_codes: DirectCodes,
     pub teams_direct_codes: DirectCodes,
     slippi_semver: String,
     watcher: Arc<Mutex<UserInfoWatcher>>,
-    rank_data: Arc<Mutex<RankData>>,
-    rank_request_thread: Arc<Mutex<Option<thread::JoinHandle<()>>>>,
+    rank_fetcher: RankFetcher,
 }
 
 impl UserManager {
@@ -93,6 +92,7 @@ impl UserManager {
     /// live. This is an OS-specific value and we currently need to share it with Dolphin,
     /// so this should be passed via the FFI layer. In the future, we may be able to remove
     /// this restriction via some assumptions.
+    ///
     // @TODO: The semver param here should get refactored away in time once we've ironed out
     // how some things get persisted from the Dolphin side. Not a big deal to thread it for now.
     pub fn new(api_client: APIClient, mut user_config_folder: PathBuf, slippi_semver: String) -> Self {
@@ -114,20 +114,26 @@ impl UserManager {
         });
 
         let user = Arc::new(Mutex::new(UserInfo::default()));
+
+        let rank = Arc::new(Mutex::new({
+            let mut info = RankInfo::default();
+            info.rank = -1;
+            info
+        }));
+
         let watcher = Arc::new(Mutex::new(UserInfoWatcher::new()));
-        let rank_data = Arc::new(Mutex::new(RankData::default()));
-        let rank_request_thread = Arc::new(Mutex::new(None));
+        let rank_fetcher = RankFetcher::new();
 
         Self {
             api_client,
             user,
+            rank,
             user_json_path,
             direct_codes,
             teams_direct_codes,
             slippi_semver,
             watcher,
-            rank_data,
-            rank_request_thread,
+            rank_fetcher,
         }
     }
 
@@ -181,7 +187,13 @@ impl UserManager {
     /// Runs the `attempt_login` function on the calling thread. If you need this to run in the
     /// background, you want `watch_for_login` instead.
     pub fn attempt_login(&self) -> bool {
-        attempt_login(&self.api_client, &self.user, &self.user_json_path, &self.slippi_semver)
+        attempt_login(
+            &self.api_client,
+            &self.user,
+            &self.rank,
+            &self.user_json_path,
+            &self.slippi_semver,
+        )
     }
 
     /// Kicks off a background handler for processing user authentication.
@@ -192,6 +204,7 @@ impl UserManager {
             self.api_client.clone(),
             self.user_json_path.clone(),
             self.user.clone(),
+            self.rank.clone(),
             &self.slippi_semver,
         );
     }
@@ -243,44 +256,27 @@ impl UserManager {
 
     /// Gets the current rank state (even if blank), along with the current status of
     /// any ongoing fetch operations.
-    pub fn current_rank_and_status(&self) -> (Option<RankInfo>, FetchStatus) {
-        let data = self.rank_data.lock().unwrap();
-        (data.current_rank.clone(), data.fetch_status.clone())
+    pub fn current_rank_and_status(&self) -> (RankInfo, RankFetchStatus) {
+        let data = self.rank.lock().unwrap();
+        let status = self.rank_fetcher.status.get();
+
+        (*data, status)
     }
 
-    /// Fetches the match result for a given match ID.
-    ///
-    /// This will spin up a background thread to fetch the match result
-    /// and update the rank data accordingly. If a background thread is already
-    /// running, this will not start a new one.
+    /// Instructs the rank manager to check for any rank updates.
     pub fn fetch_match_result(&self, match_id: String) {
-        let mut thread = self.rank_request_thread.lock().unwrap();
-
-        // If a user leaves and re-enters the CSS while a request is ongoing, we
-        // don't want to fire up multiple threads and issue multiple requests: limit
-        // things to one background thread at a time.
-        if thread.is_some() && !thread.as_ref().unwrap().is_finished() {
-            return;
-        }
-
-        let api_client = self.api_client.clone();
+        let client = self.api_client.clone();
         let (uid, play_key) = self.get(|user| (user.uid.clone(), user.play_key.clone()));
-        let data = self.rank_data.clone();
+        let rank = self.rank.clone();
 
-        let background_thread = thread::Builder::new()
-            .name("RankMatchResultThread".into())
-            .spawn(move || {
-                rank::run_match_result(api_client, match_id, uid, play_key, data);
-            })
-            .expect("Failed to spawn RankMatchResultThread.");
-
-        *thread = Some(background_thread);
+        self.rank_fetcher.fetch_match_result(client, match_id, uid, play_key, rank);
     }
 
     /// Logs the current user out and removes their `user.json` from the filesystem.
     pub fn logout(&mut self) {
-        self.rank_data = Arc::new(Mutex::new(RankData::default()));
-        self.rank_request_thread = Arc::new(Mutex::new(None));
+        // Initialize a `0` rank, I guess.
+        self.rank = Arc::new(Mutex::new(RankInfo::default()));
+
         self.set(|user| *user = UserInfo::default());
 
         if let Err(error) = std::fs::remove_file(self.user_json_path.as_path()) {
@@ -296,7 +292,13 @@ impl UserManager {
 /// Checks for the existence of a `user.json` file and, if found, attempts to load and parse it.
 ///
 /// This returns a `bool` value so that the background thread can know whether to stop checking.
-fn attempt_login(api_client: &APIClient, user: &Arc<Mutex<UserInfo>>, user_json_path: &PathBuf, slippi_semver: &str) -> bool {
+fn attempt_login(
+    api_client: &APIClient,
+    user: &Mutex<UserInfo>,
+    rank: &Mutex<RankInfo>,
+    user_json_path: &PathBuf,
+    slippi_semver: &str,
+) -> bool {
     match std::fs::read_to_string(user_json_path) {
         Ok(contents) => match serde_json::from_str::<UserInfo>(&contents) {
             Ok(mut info) => {
@@ -305,11 +307,10 @@ fn attempt_login(api_client: &APIClient, user: &Arc<Mutex<UserInfo>>, user_json_
                 let uid = info.uid.clone();
                 {
                     let mut lock = user.lock().expect("Unable to lock user in attempt_login");
-
                     *lock = info;
                 }
 
-                overwrite_from_server(api_client, user, uid, slippi_semver);
+                overwrite_from_server(api_client, user, rank, uid, slippi_semver);
                 return true;
             },
 
@@ -371,7 +372,13 @@ pub struct UserRankInfo {
 
 /// Calls out to the Slippi server and fetches the user info, patching up the user info object
 /// with any returned information.
-fn overwrite_from_server(api_client: &APIClient, user: &Arc<Mutex<UserInfo>>, uid: String, slippi_semver: &str) {
+fn overwrite_from_server(
+    api_client: &APIClient,
+    user: &Mutex<UserInfo>,
+    rank: &Mutex<RankInfo>,
+    uid: String,
+    slippi_semver: &str,
+) {
     let is_beta = match slippi_semver.contains("beta") {
         true => "-beta",
         false => "",
@@ -386,22 +393,19 @@ fn overwrite_from_server(api_client: &APIClient, user: &Arc<Mutex<UserInfo>>, ui
         Ok(response) => match response.into_string() {
             Ok(body) => match serde_json::from_str::<UserInfoAPIResponse>(&body) {
                 Ok(info) => {
-                    let mut lock = user.lock().expect("Unable to lock user in attempt_login");
-
+                    let mut lock = user.lock().unwrap();
                     lock.uid = info.uid;
                     lock.display_name = info.display_name;
                     lock.connect_code = info.connect_code;
                     lock.latest_version = info.latest_version;
                     lock.chat_messages = Some(info.chat_messages);
-                    lock.ranked_ordinal = info.rank.rating_ordinal;
-                    lock.ranked_global_placing = info.rank.global_placing;
-                    lock.ranked_local_placing = info.rank.regional_placing;
-                    lock.ranked_rating_update_count = info.rank.rating_update_count;
-
-                    // TODO: Figure out how to get rank to rank module
-                    // perhaps set up some kind of broadcast
-
                     (*lock).sanitize();
+
+                    let mut lock = rank.lock().unwrap();
+                    lock.rating_ordinal = info.rank.rating_ordinal;
+                    lock.global_placing = info.rank.global_placing;
+                    lock.regional_placing = info.rank.regional_placing;
+                    lock.rating_update_count = info.rank.rating_update_count;
                 },
 
                 Err(error) => {

@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use slippi_gg_api::APIClient;
 
-use super::{UserInfo, attempt_login};
+use super::{RankInfo, UserInfo, attempt_login};
 
 /// This type manages access to user information, as well as any background thread watching
 /// for `user.json` file existence.
@@ -31,6 +31,7 @@ impl UserInfoWatcher {
         api_client: APIClient,
         user_json_path: Arc<PathBuf>,
         user: Arc<Mutex<UserInfo>>,
+        rank: Arc<Mutex<RankInfo>>,
         slippi_semver: &str,
     ) {
         // If we're already watching, no-op out.
@@ -56,7 +57,7 @@ impl UserInfoWatcher {
                         return;
                     }
 
-                    if attempt_login(&api_client, &user, &user_json_path, &slippi_semver) {
+                    if attempt_login(&api_client, &user, &rank, &user_json_path, &slippi_semver) {
                         return;
                     }
 

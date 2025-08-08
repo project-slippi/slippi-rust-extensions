@@ -7,56 +7,24 @@ use serde_json::json;
 use dolphin_integrations::Log;
 use slippi_gg_api::{APIClient, GraphQLError};
 
-mod rank;
-
-/// Represents a slice of rank information from the Slippi server.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct RankInfo {
-    pub rank: i8,
-    pub rating_ordinal: f32,
-    pub global_placing: u16,
-    pub regional_placing: u16,
-    pub rating_update_count: u32,
-    pub rating_change: f32,
-    pub rank_change: i8,
-}
-
-/// Represents current state of the rank flow.
-///
-/// Note that we mark this as C-compatible due to FFI usage.
-#[repr(C)]
-#[derive(Copy, Clone, Debug, Default)]
-pub enum FetchStatus {
-    #[default]
-    NotFetched,
-    Fetching,
-    Fetched,
-    Error,
-}
-
-/// Internal state representing player rank data, as well as the current
-/// state of any network operations.
-#[derive(Debug, Clone, Default)]
-pub struct RankData {
-    pub fetch_status: FetchStatus,
-    pub current_rank: Option<RankInfo>,
-}
-
-/// Helper method for setting the fetch status.
-pub fn set_status(data: &Mutex<RankData>, status: FetchStatus) {
-    let mut lock = data.lock().unwrap();
-    lock.fetch_status = status;
-}
+use super::{RankFetchStatus, RankFetcherStatus, RankInfo};
 
 /// The core of the background thread that handles network requests
 /// for checking player rank updates.
-pub fn run_match_result(api_client: APIClient, match_id: String, uid: String, play_key: String, rank_data: Arc<Mutex<RankData>>) {
+pub fn run_match_result(
+    api_client: APIClient,
+    match_id: String,
+    uid: String,
+    play_key: String,
+    status: RankFetcherStatus,
+    data: Arc<Mutex<RankInfo>>,
+) {
     let mut retry_index = 0;
 
     loop {
-        set_status(&rank_data, FetchStatus::Fetching);
+        status.set(RankFetchStatus::Fetching);
 
-        match fetch_match_result(&api_client, match_id.clone(), uid.clone(), play_key.clone()) {
+        match fetch_match_result(&api_client, &match_id, &uid, &play_key) {
             Ok(response) => {
                 // If the match hasn't been processed yet, wait and retry
                 if response.status == MatchStatus::Assigned {
@@ -67,8 +35,8 @@ pub fn run_match_result(api_client: APIClient, match_id: String, uid: String, pl
                     }
                 }
 
-                update_rank(&rank_data, response);
-                set_status(&rank_data, FetchStatus::Fetched);
+                update_rank(&data, response);
+                status.set(RankFetchStatus::Fetched);
                 break;
             },
 
@@ -83,7 +51,7 @@ pub fn run_match_result(api_client: APIClient, match_id: String, uid: String, pl
 
                 // Only set the error flag after multiple retries have failed(?)
                 if retry_index >= 3 {
-                    set_status(&rank_data, FetchStatus::Error);
+                    status.set(RankFetchStatus::Error);
                     break;
                 }
 
@@ -95,7 +63,7 @@ pub fn run_match_result(api_client: APIClient, match_id: String, uid: String, pl
 }
 
 #[derive(Clone, Copy, Debug, Default, serde::Deserialize)]
-struct MatchResultParticipantAPIResponse {
+struct MatchResultParticipant {
     #[serde(alias = "ordinal")]
     pub pre_match_ordinal: Option<f32>,
 
@@ -137,14 +105,14 @@ struct MatchResultAPIResponse {
 
     // Include the participant
     #[serde(alias = "participant")]
-    pub participant: MatchResultParticipantAPIResponse,
+    pub participant: MatchResultParticipant,
 }
 
 fn fetch_match_result(
     api_client: &APIClient,
-    match_id: String,
-    uid: String,
-    play_key: String,
+    match_id: &str,
+    uid: &str,
+    play_key: &str,
 ) -> Result<MatchResultAPIResponse, GraphQLError> {
     let query = r#"
         query ($request: OnlineMatchRequestInput!) {
@@ -169,7 +137,7 @@ fn fetch_match_result(
         }
     });
 
-    let response: MatchResultAPIResponse = api_client
+    let response = api_client
         .graphql(query)
         .variables(variables)
         .data_field("/data/getRankedMatchPersonalResult")
@@ -179,9 +147,7 @@ fn fetch_match_result(
 }
 
 /// Updates the previous and current rank data based on the match result response.
-fn update_rank(rank_data: &Arc<Mutex<RankData>>, response: MatchResultAPIResponse) {
-    let mut rank_data = rank_data.lock().unwrap();
-
+fn update_rank(rank_data: &Mutex<RankInfo>, response: MatchResultAPIResponse) {
     // Grab the pre-match data and put it in previous.
     // It's possible that the previous will no longer match the prior previous rank
     // that was displayed, but I think that's okay because that would only happen
@@ -213,11 +179,12 @@ fn update_rank(rank_data: &Arc<Mutex<RankData>>, response: MatchResultAPIRespons
     rank_info.rank_change = rank_info.rank - prev_rank_idx;
 
     // Load into rank_data
-    rank_data.current_rank = Some(rank_info);
+    let mut rank_data = rank_data.lock().unwrap();
+    *rank_data = rank_info;
 }
 
 fn get_rank_idx_from_info(info: &RankInfo) -> i8 {
-    rank::decide(
+    super::rank::decide(
         info.rating_ordinal,
         info.global_placing,
         info.regional_placing,
