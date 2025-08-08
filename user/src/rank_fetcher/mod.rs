@@ -6,7 +6,9 @@ use slippi_gg_api::APIClient;
 use crate::RankInfo;
 
 mod network;
+
 mod rank;
+pub use rank::SlippiRank;
 
 /// Represents current state of the rank flow.
 ///
@@ -14,7 +16,6 @@ mod rank;
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 pub enum RankFetchStatus {
-    NotFetched,
     Fetching,
     Fetched,
     Error,
@@ -27,8 +28,12 @@ pub struct RankFetcherStatus(Arc<Mutex<RankFetchStatus>>);
 
 impl RankFetcherStatus {
     /// Creates and returns a new status.
+    ///
+    /// This defaults to `Fetched` as we load initial rank data on client
+    /// sign-in to begin with, meaning we should (theoretically, at least)
+    /// always have some generic rank data to work with.
     pub fn new() -> Self {
-        Self(Arc::new(Mutex::new(RankFetchStatus::NotFetched)))
+        Self(Arc::new(Mutex::new(RankFetchStatus::Fetched)))
     }
 
     /// Sets the underlying status.

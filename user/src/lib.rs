@@ -14,7 +14,7 @@ use direct_codes::DirectCodes;
 
 mod rank_fetcher;
 pub use rank_fetcher::RankFetchStatus;
-use rank_fetcher::RankFetcher;
+use rank_fetcher::{RankFetcher, SlippiRank};
 
 mod watcher;
 use watcher::UserInfoWatcher;
@@ -114,12 +114,7 @@ impl UserManager {
         });
 
         let user = Arc::new(Mutex::new(UserInfo::default()));
-
-        let rank = Arc::new(Mutex::new({
-            let mut info = RankInfo::default();
-            info.rank = -1;
-            info
-        }));
+        let rank = Arc::new(Mutex::new(RankInfo::default()));
 
         let watcher = Arc::new(Mutex::new(UserInfoWatcher::new()));
         let rank_fetcher = RankFetcher::new();
@@ -274,9 +269,7 @@ impl UserManager {
 
     /// Logs the current user out and removes their `user.json` from the filesystem.
     pub fn logout(&mut self) {
-        // Initialize a `0` rank, I guess.
         self.rank = Arc::new(Mutex::new(RankInfo::default()));
-
         self.set(|user| *user = UserInfo::default());
 
         if let Err(error) = std::fs::remove_file(self.user_json_path.as_path()) {
@@ -401,11 +394,24 @@ fn overwrite_from_server(
                     lock.chat_messages = Some(info.chat_messages);
                     (*lock).sanitize();
 
+                    let rank_idx = SlippiRank::decide(
+                        info.rank.rating_ordinal,
+                        info.rank.global_placing,
+                        info.rank.regional_placing,
+                        info.rank.rating_update_count,
+                    ) as i8;
+
                     let mut lock = rank.lock().unwrap();
-                    lock.rating_ordinal = info.rank.rating_ordinal;
-                    lock.global_placing = info.rank.global_placing;
-                    lock.regional_placing = info.rank.regional_placing;
-                    lock.rating_update_count = info.rank.rating_update_count;
+
+                    *lock = RankInfo {
+                        rank: rank_idx,
+                        rating_ordinal: info.rank.rating_ordinal,
+                        global_placing: info.rank.global_placing,
+                        regional_placing: info.rank.regional_placing,
+                        rating_update_count: info.rank.rating_update_count,
+                        rating_change: 0.0, // No change on initial load
+                        rank_change: 0,     // No change on initial load
+                    };
                 },
 
                 Err(error) => {

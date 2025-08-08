@@ -7,7 +7,7 @@ use serde_json::json;
 use dolphin_integrations::Log;
 use slippi_gg_api::{APIClient, GraphQLError};
 
-use super::{RankFetchStatus, RankFetcherStatus, RankInfo};
+use super::{RankFetchStatus, RankFetcherStatus, RankInfo, SlippiRank};
 
 /// The core of the background thread that handles network requests
 /// for checking player rank updates.
@@ -184,7 +184,7 @@ fn update_rank(rank_data: &Mutex<RankInfo>, response: MatchResultAPIResponse) {
 }
 
 fn get_rank_idx_from_info(info: &RankInfo) -> i8 {
-    super::rank::decide(
+    SlippiRank::decide(
         info.rating_ordinal,
         info.global_placing,
         info.regional_placing,
