@@ -354,10 +354,10 @@ pub struct UserRankInfo {
     pub rating_ordinal: f32,
 
     #[serde(alias = "dailyGlobalPlacement")]
-    pub global_placing: u16,
+    pub global_placing: Option<u16>,
 
     #[serde(alias = "dailyRegionalPlacement")]
-    pub regional_placing: u16,
+    pub regional_placing: Option<u16>,
 
     #[serde(alias = "ratingUpdateCount")]
     pub rating_update_count: u32,
@@ -396,8 +396,8 @@ fn overwrite_from_server(
 
                     let rank_idx = SlippiRank::decide(
                         info.rank.rating_ordinal,
-                        info.rank.global_placing,
-                        info.rank.regional_placing,
+                        info.rank.global_placing.unwrap_or(0),
+                        info.rank.regional_placing.unwrap_or(0),
                         info.rank.rating_update_count,
                     ) as i8;
 
@@ -406,8 +406,8 @@ fn overwrite_from_server(
                     *lock = RankInfo {
                         rank: rank_idx,
                         rating_ordinal: info.rank.rating_ordinal,
-                        global_placing: info.rank.global_placing,
-                        regional_placing: info.rank.regional_placing,
+                        global_placing: info.rank.global_placing.unwrap_or(0),
+                        regional_placing: info.rank.regional_placing.unwrap_or(0),
                         rating_update_count: info.rank.rating_update_count,
                         rating_change: 0.0, // No change on initial load
                         rank_change: 0,     // No change on initial load
