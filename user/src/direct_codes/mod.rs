@@ -64,12 +64,12 @@ impl DirectCodes {
                 },
 
                 Err(error) => {
-                    tracing::error!(?error, "Unable to parse direct codes file");
+                    tracing::error!(target: Log::SlippiOnline, ?error, "Unable to parse direct codes file");
                 },
             },
 
             Err(error) => {
-                tracing::error!(?error, "Unable to read direct codes file");
+                tracing::error!(target: Log::SlippiOnline, ?error, "Unable to read direct codes file");
             },
         }
 

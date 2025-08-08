@@ -22,5 +22,7 @@ slippi-gg-api = { path = "../slippi-gg-api" }
 open = "5"
 serde = { workspace = true }
 serde_json = { workspace = true }
+thiserror = { workspace = true }
 time = { workspace = true }
 tracing = { workspace = true }
+ureq = { workspace = true }

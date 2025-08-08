@@ -29,11 +29,11 @@ pub struct RankFetcherStatus(Arc<Mutex<RankFetchStatus>>);
 impl RankFetcherStatus {
     /// Creates and returns a new status.
     ///
-    /// This defaults to `Fetched` as we load initial rank data on client
-    /// sign-in to begin with, meaning we should (theoretically, at least)
-    /// always have some generic rank data to work with.
+    /// This defaults to `Error`. We attempt to load initial rank data on client
+    /// sign-in, meaning we should (theoretically, at least) always have some
+    /// generic rank data to work with - but we'll set it then to be safe.
     pub fn new() -> Self {
-        Self(Arc::new(Mutex::new(RankFetchStatus::Fetched)))
+        Self(Arc::new(Mutex::new(RankFetchStatus::Error)))
     }
 
     /// Sets the underlying status.

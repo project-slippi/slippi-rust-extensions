@@ -4,6 +4,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use dolphin_integrations::Log;
 use slippi_gg_api::APIClient;
 
 mod chat;
@@ -14,7 +15,7 @@ use direct_codes::DirectCodes;
 
 mod rank_fetcher;
 pub use rank_fetcher::RankFetchStatus;
-use rank_fetcher::{RankFetcher, SlippiRank};
+use rank_fetcher::{RankFetcher, RankFetcherStatus, SlippiRank};
 
 mod watcher;
 use watcher::UserInfoWatcher;
@@ -186,6 +187,7 @@ impl UserManager {
             &self.api_client,
             &self.user,
             &self.rank,
+            &self.rank_fetcher.status,
             &self.user_json_path,
             &self.slippi_semver,
         )
@@ -196,10 +198,11 @@ impl UserManager {
         let mut watcher = self.watcher.lock().expect("Unable to acquire user watcher lock");
 
         watcher.watch_for_login(
-            self.api_client.clone(),
-            self.user_json_path.clone(),
-            self.user.clone(),
-            self.rank.clone(),
+            &self.api_client,
+            &self.user_json_path,
+            &self.user,
+            &self.rank,
+            &self.rank_fetcher.status,
             &self.slippi_semver,
         );
     }
@@ -212,15 +215,15 @@ impl UserManager {
         if let Some(path) = path_ref.to_str() {
             let url = format!("https://slippi.gg/online/enable?path={path}");
 
-            tracing::info!("[User] Login at path: {}", url);
+            tracing::info!(target: Log::SlippiOnline, "[User] Login at path: {}", url);
 
             if let Err(error) = open::that_detached(&url) {
-                tracing::error!(?error, ?url, "Failed to open login page");
+                tracing::error!(target: Log::SlippiOnline, ?error, ?url, "Failed to open login page");
             }
         } else {
             // This should never really happen, but it's conceivable that some odd unicode path
             // errors could happen... so just dump a log I guess.
-            tracing::warn!(?path_ref, "Unable to convert user.json path to UTF-8 string");
+            tracing::warn!(target: Log::SlippiOnline, ?path_ref, "Unable to convert user.json path to UTF-8 string");
         }
     }
 
@@ -228,7 +231,7 @@ impl UserManager {
     /// by, but still used.
     pub fn update_app(&self) -> bool {
         if let Err(error) = open::that_detached("https://slippi.gg/downloads?update=true") {
-            tracing::error!(?error, "Failed to open update URL");
+            tracing::error!(target: Log::SlippiOnline, ?error, "Failed to open update URL");
             return false;
         }
 
@@ -273,7 +276,7 @@ impl UserManager {
         self.set(|user| *user = UserInfo::default());
 
         if let Err(error) = std::fs::remove_file(self.user_json_path.as_path()) {
-            tracing::error!(?error, "Failed to remove user.json on logout");
+            tracing::error!(target: Log::SlippiOnline, ?error, "Failed to remove user.json on logout");
         }
 
         let mut watcher = self.watcher.lock().expect("Unable to acquire watcher lock on user logout");
@@ -289,9 +292,12 @@ fn attempt_login(
     api_client: &APIClient,
     user: &Mutex<UserInfo>,
     rank: &Mutex<RankInfo>,
+    rank_fetcher_status: &RankFetcherStatus,
     user_json_path: &PathBuf,
     slippi_semver: &str,
 ) -> bool {
+    let mut success = false;
+
     match std::fs::read_to_string(user_json_path) {
         Ok(contents) => match serde_json::from_str::<UserInfo>(&contents) {
             Ok(mut info) => {
@@ -303,14 +309,16 @@ fn attempt_login(
                     *lock = info;
                 }
 
-                overwrite_from_server(api_client, user, rank, uid, slippi_semver);
-                return true;
+                if let Err(error) = overwrite_from_server(api_client, user, rank, uid, slippi_semver) {
+                    tracing::error!(target: Log::SlippiOnline, ?error, "Failed to log in via server");
+                } else {
+                    success = true;
+                }
             },
 
             // JSON parsing error
             Err(error) => {
-                tracing::error!(?error, "Unable to parse user.json");
-                return false;
+                tracing::error!(target: Log::SlippiOnline, ?error, "Unable to parse user.json");
             },
         },
 
@@ -318,12 +326,17 @@ fn attempt_login(
         Err(error) => {
             // A not-found file just means they haven't logged in yet... presumably.
             if error.kind() != std::io::ErrorKind::NotFound {
-                tracing::error!(?error, "Unable to read user.json");
+                tracing::error!(target: Log::SlippiOnline, ?error, "Unable to read user.json");
             }
-
-            return false;
         },
     }
+
+    // This is likely already set in this case, but it doesn't hurt to be thorough.
+    if !success {
+        rank_fetcher_status.set(RankFetchStatus::Error);
+    }
+
+    success
 }
 
 /// The core payload that represents user information. This type is expected to conform
@@ -363,6 +376,15 @@ pub struct UserRankInfo {
     pub rating_update_count: u32,
 }
 
+#[derive(Debug, thiserror::Error)]
+enum APILoginError {
+    #[error(transparent)]
+    Client(ureq::Error),
+
+    #[error(transparent)]
+    IO(std::io::Error),
+}
+
 /// Calls out to the Slippi server and fetches the user info, patching up the user info object
 /// with any returned information.
 fn overwrite_from_server(
@@ -371,7 +393,7 @@ fn overwrite_from_server(
     rank: &Mutex<RankInfo>,
     uid: String,
     slippi_semver: &str,
-) {
+) -> Result<(), APILoginError> {
     let is_beta = match slippi_semver.contains("beta") {
         true => "-beta",
         false => "",
@@ -380,55 +402,41 @@ fn overwrite_from_server(
     // @TODO: Switch this to a GraphQL call? Likely a Fizzi/Nikki task.
     let url = format!("{USER_API_URL}{is_beta}/{uid}?additionalFields=chatMessages,rank");
 
-    tracing::warn!(?url, "Fetching user info");
+    tracing::warn!(target: Log::SlippiOnline, ?url, "Fetching user info");
 
-    match api_client.get(&url).call() {
-        Ok(response) => match response.into_string() {
-            Ok(body) => match serde_json::from_str::<UserInfoAPIResponse>(&body) {
-                Ok(info) => {
-                    let mut lock = user.lock().unwrap();
-                    lock.uid = info.uid;
-                    lock.display_name = info.display_name;
-                    lock.connect_code = info.connect_code;
-                    lock.latest_version = info.latest_version;
-                    lock.chat_messages = Some(info.chat_messages);
-                    (*lock).sanitize();
+    let info: UserInfoAPIResponse = api_client
+        .get(&url)
+        .call()
+        .map_err(APILoginError::Client)?
+        .into_json()
+        .map_err(APILoginError::IO)?;
 
-                    let rank_idx = SlippiRank::decide(
-                        info.rank.rating_ordinal,
-                        info.rank.global_placing.unwrap_or(0),
-                        info.rank.regional_placing.unwrap_or(0),
-                        info.rank.rating_update_count,
-                    ) as i8;
+    let mut lock = user.lock().unwrap();
+    lock.uid = info.uid;
+    lock.display_name = info.display_name;
+    lock.connect_code = info.connect_code;
+    lock.latest_version = info.latest_version;
+    lock.chat_messages = Some(info.chat_messages);
+    (*lock).sanitize();
 
-                    let mut lock = rank.lock().unwrap();
+    let rank_idx = SlippiRank::decide(
+        info.rank.rating_ordinal,
+        info.rank.global_placing.unwrap_or(0),
+        info.rank.regional_placing.unwrap_or(0),
+        info.rank.rating_update_count,
+    ) as i8;
 
-                    *lock = RankInfo {
-                        rank: rank_idx,
-                        rating_ordinal: info.rank.rating_ordinal,
-                        global_placing: info.rank.global_placing.unwrap_or(0),
-                        regional_placing: info.rank.regional_placing.unwrap_or(0),
-                        rating_update_count: info.rank.rating_update_count,
-                        rating_change: 0.0, // No change on initial load
-                        rank_change: 0,     // No change on initial load
-                    };
-                },
+    let mut lock = rank.lock().unwrap();
 
-                Err(error) => {
-                    tracing::error!(?error, "Unable to deserialize user info API payload");
-                },
-            },
+    *lock = RankInfo {
+        rank: rank_idx,
+        rating_ordinal: info.rank.rating_ordinal,
+        global_placing: info.rank.global_placing.unwrap_or(0),
+        regional_placing: info.rank.regional_placing.unwrap_or(0),
+        rating_update_count: info.rank.rating_update_count,
+        rating_change: 0.0, // No change on initial load
+        rank_change: 0,     // No change on initial load
+    };
 
-            // Failed to read into a string, usually an I/O error.
-            Err(error) => {
-                tracing::error!(?error, "Unable to read user info response body");
-            },
-        },
-
-        // `error` is an enum, where one branch will contain the status code if relevant.
-        // We log the debug representation to just see it all.
-        Err(error) => {
-            tracing::error!(?error, "API call for user info failed");
-        },
-    }
+    Ok(())
 }

@@ -4,9 +4,10 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use dolphin_integrations::Log;
 use slippi_gg_api::APIClient;
 
-use super::{RankInfo, UserInfo, attempt_login};
+use super::{RankFetcherStatus, RankInfo, UserInfo, attempt_login};
 
 /// This type manages access to user information, as well as any background thread watching
 /// for `user.json` file existence.
@@ -28,10 +29,11 @@ impl UserInfoWatcher {
     /// Spins up (or re-spins-up) the background watcher thread for the `user.json` file.
     pub fn watch_for_login(
         &mut self,
-        api_client: APIClient,
-        user_json_path: Arc<PathBuf>,
-        user: Arc<Mutex<UserInfo>>,
-        rank: Arc<Mutex<RankInfo>>,
+        api_client: &APIClient,
+        user_json_path: &Arc<PathBuf>,
+        user: &Arc<Mutex<UserInfo>>,
+        rank: &Arc<Mutex<RankInfo>>,
+        rank_fetcher_status: &RankFetcherStatus,
         slippi_semver: &str,
     ) {
         // If we're already watching, no-op out.
@@ -46,8 +48,13 @@ impl UserInfoWatcher {
         let should_watch = self.should_watch.clone();
         should_watch.store(true, Ordering::Relaxed);
 
-        // Create an owned String once we know we're actually launching the thread.
-        let slippi_semver = slippi_semver.to_string();
+        // Create owned types once we know we're actually launching the thread.
+        let semver = slippi_semver.to_string();
+        let client = api_client.clone();
+        let json_path = user_json_path.clone();
+        let user = user.clone();
+        let rank = rank.clone();
+        let rank_fetcher_status = rank_fetcher_status.clone();
 
         let watcher_thread = thread::Builder::new()
             .name("SlippiUserJSONWatcherThread".into())
@@ -57,7 +64,7 @@ impl UserInfoWatcher {
                         return;
                     }
 
-                    if attempt_login(&api_client, &user, &rank, &user_json_path, &slippi_semver) {
+                    if attempt_login(&client, &user, &rank, &rank_fetcher_status, &json_path, &semver) {
                         return;
                     }
 
@@ -80,7 +87,7 @@ impl UserInfoWatcher {
         self.should_watch.store(false, Ordering::Relaxed);
         if let Some(watcher_thread) = self.watcher_thread.take() {
             if let Err(error) = watcher_thread.join() {
-                tracing::error!(?error, "user.json background thread join failure");
+                tracing::error!(target: Log::SlippiOnline, ?error, "user.json background thread join failure");
             }
         }
     }
