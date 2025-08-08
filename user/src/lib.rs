@@ -127,7 +127,7 @@ impl UserManager {
             slippi_semver,
             watcher,
             rank_data,
-            rank_request_thread
+            rank_request_thread,
         }
     }
 
