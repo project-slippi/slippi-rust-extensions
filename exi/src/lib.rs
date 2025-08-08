@@ -9,7 +9,6 @@ use dolphin_integrations::Log;
 use slippi_game_reporter::GameReporter;
 use slippi_gg_api::APIClient;
 use slippi_jukebox::Jukebox;
-use slippi_rank::RankManager;
 use slippi_user::UserManager;
 
 mod config;
@@ -20,7 +19,6 @@ pub use config::{Config, FilePathsConfig, SCMConfig};
 pub struct SlippiEXIDevice {
     config: Config,
     pub game_reporter: GameReporter,
-    pub rank_manager: RankManager,
     pub user_manager: UserManager,
     pub jukebox: Option<Jukebox>,
 }
@@ -50,8 +48,6 @@ impl SlippiEXIDevice {
 
         let game_reporter = GameReporter::new(api_client.clone(), user_manager.clone(), config.paths.iso.clone());
 
-        let rank_manager = RankManager::new(api_client.clone(), user_manager.clone());
-
         // Playback has no need to deal with this.
         // (We could maybe silo more?)
         #[cfg(not(feature = "playback"))]
@@ -61,7 +57,6 @@ impl SlippiEXIDevice {
             config,
             game_reporter,
             user_manager,
-            rank_manager,
             jukebox: None,
         }
     }

@@ -17,9 +17,10 @@ playback = []
 
 [dependencies]
 dolphin-integrations = { path = "../dolphin" }
+slippi-gg-api = { path = "../slippi-gg-api" }
+
 open = "5"
 serde = { workspace = true }
 serde_json = { workspace = true }
-slippi-gg-api = { path = "../slippi-gg-api" }
 time = { workspace = true }
 tracing = { workspace = true }

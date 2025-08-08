@@ -1,8 +1,9 @@
-//! This module contains data models and helper methods for handling user authentication
-//! from within Slippi Dolphin.
+//! This module contains data models and helper methods for handling user authentication and
+//! interaction from within Slippi Dolphin.
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::thread;
 
 use slippi_gg_api::APIClient;
 
@@ -11,6 +12,10 @@ pub use chat::DEFAULT_CHAT_MESSAGES;
 
 mod direct_codes;
 use direct_codes::DirectCodes;
+
+mod rank;
+use rank::RankData;
+pub use rank::{FetchStatus, RankInfo};
 
 mod watcher;
 use watcher::UserInfoWatcher;
@@ -77,6 +82,8 @@ pub struct UserManager {
     pub teams_direct_codes: DirectCodes,
     slippi_semver: String,
     watcher: Arc<Mutex<UserInfoWatcher>>,
+    rank_data: Arc<Mutex<RankData>>,
+    rank_request_thread: Arc<Mutex<Option<thread::JoinHandle<()>>>>,
 }
 
 impl UserManager {
@@ -108,6 +115,8 @@ impl UserManager {
 
         let user = Arc::new(Mutex::new(UserInfo::default()));
         let watcher = Arc::new(Mutex::new(UserInfoWatcher::new()));
+        let rank_data = Arc::new(Mutex::new(RankData::default()));
+        let rank_request_thread = Arc::new(Mutex::new(None));
 
         Self {
             api_client,
@@ -117,6 +126,8 @@ impl UserManager {
             teams_direct_codes,
             slippi_semver,
             watcher,
+            rank_data,
+            rank_request_thread
         }
     }
 
@@ -230,8 +241,46 @@ impl UserManager {
         });
     }
 
+    /// Gets the current rank state (even if blank), along with the current status of
+    /// any ongoing fetch operations.
+    pub fn current_rank_and_status(&self) -> (Option<RankInfo>, FetchStatus) {
+        let data = self.rank_data.lock().unwrap();
+        (data.current_rank.clone(), data.fetch_status.clone())
+    }
+
+    /// Fetches the match result for a given match ID.
+    ///
+    /// This will spin up a background thread to fetch the match result
+    /// and update the rank data accordingly. If a background thread is already
+    /// running, this will not start a new one.
+    pub fn fetch_match_result(&self, match_id: String) {
+        let mut thread = self.rank_request_thread.lock().unwrap();
+
+        // If a user leaves and re-enters the CSS while a request is ongoing, we
+        // don't want to fire up multiple threads and issue multiple requests: limit
+        // things to one background thread at a time.
+        if thread.is_some() && !thread.as_ref().unwrap().is_finished() {
+            return;
+        }
+
+        let api_client = self.api_client.clone();
+        let (uid, play_key) = self.get(|user| (user.uid.clone(), user.play_key.clone()));
+        let data = self.rank_data.clone();
+
+        let background_thread = thread::Builder::new()
+            .name("RankMatchResultThread".into())
+            .spawn(move || {
+                rank::run_match_result(api_client, match_id, uid, play_key, data);
+            })
+            .expect("Failed to spawn RankMatchResultThread.");
+
+        *thread = Some(background_thread);
+    }
+
     /// Logs the current user out and removes their `user.json` from the filesystem.
     pub fn logout(&mut self) {
+        self.rank_data = Arc::new(Mutex::new(RankData::default()));
+        self.rank_request_thread = Arc::new(Mutex::new(None));
         self.set(|user| *user = UserInfo::default());
 
         if let Err(error) = std::fs::remove_file(self.user_json_path.as_path()) {
