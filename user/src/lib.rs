@@ -37,6 +37,18 @@ pub struct UserInfo {
 
     #[serde(alias = "chatMessages")]
     pub chat_messages: Option<Vec<String>>,
+
+    #[serde(alias = "ranked_ordinal")]
+    pub ranked_ordinal: f32,
+
+    #[serde(alias = "ranked_global_placing")]
+    pub ranked_global_placing: u16,
+
+    #[serde(alias = "ranked_local_placing")]
+    pub ranked_local_placing: u16,
+
+    #[serde(alias = "ranked_rating_update_count")]
+    pub ranked_rating_update_count: u32,
 }
 
 impl UserInfo {
@@ -288,6 +300,24 @@ struct UserInfoAPIResponse {
 
     #[serde(alias = "chatMessages")]
     pub chat_messages: Vec<String>,
+
+    #[serde(alias = "rank")]
+    pub rank: UserRankInfo,
+}
+
+#[derive(Debug, Default, serde::Deserialize)]
+pub struct UserRankInfo {
+    #[serde(alias = "ratingOrdinal")]
+    pub rating_ordinal: f32,
+
+    #[serde(alias = "dailyGlobalPlacement")]
+    pub global_placing: u16,
+
+    #[serde(alias = "dailyRegionalPlacement")]
+    pub regional_placing: u16,
+
+    #[serde(alias = "ratingUpdateCount")]
+    pub rating_update_count: u32,
 }
 
 /// Calls out to the Slippi server and fetches the user info, patching up the user info object
@@ -299,7 +329,7 @@ fn overwrite_from_server(api_client: &APIClient, user: &Arc<Mutex<UserInfo>>, ui
     };
 
     // @TODO: Switch this to a GraphQL call? Likely a Fizzi/Nikki task.
-    let url = format!("{USER_API_URL}{is_beta}/{uid}?additionalFields=chatMessages");
+    let url = format!("{USER_API_URL}{is_beta}/{uid}?additionalFields=chatMessages,rank");
 
     tracing::warn!(?url, "Fetching user info");
 
@@ -314,6 +344,13 @@ fn overwrite_from_server(api_client: &APIClient, user: &Arc<Mutex<UserInfo>>, ui
                     lock.connect_code = info.connect_code;
                     lock.latest_version = info.latest_version;
                     lock.chat_messages = Some(info.chat_messages);
+                    lock.ranked_ordinal = info.rank.rating_ordinal;
+                    lock.ranked_global_placing = info.rank.global_placing;
+                    lock.ranked_local_placing = info.rank.regional_placing;
+                    lock.ranked_rating_update_count = info.rank.rating_update_count;
+
+                    // TODO: Figure out how to get rank to rank module
+                    // perhaps set up some kind of broadcast
 
                     (*lock).sanitize();
                 },

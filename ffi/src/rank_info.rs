@@ -17,14 +17,6 @@ pub struct RustRankInfo {
     pub rank_change: c_int,
 }
 
-/// Fetches the rank information of the user currently logged in.
-#[unsafe(no_mangle)]
-pub extern "C" fn slprs_fetch_rank_info(exi_device_instance_ptr: usize) {
-    with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, |device| {
-        device.rank_manager.fetch();
-    })
-}
-
 /// Fetches the result of a recently played match via its ID.
 #[unsafe(no_mangle)]
 pub extern "C" fn slprs_fetch_match_result(exi_device_instance_ptr: usize, match_id: *const c_char) {

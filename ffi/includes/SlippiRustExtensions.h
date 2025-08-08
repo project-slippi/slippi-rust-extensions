@@ -270,11 +270,6 @@ void slprs_logging_update_container(const char *kind, bool enabled, int level);
 void slprs_mainline_logging_update_log_level(int level);
 
 /**
- * Fetches the rank information of the user currently logged in.
- */
-void slprs_fetch_rank_info(uintptr_t exi_device_instance_ptr);
-
-/**
  * Fetches the result of a recently played match via its ID.
  */
 void slprs_fetch_match_result(uintptr_t exi_device_instance_ptr, const char *match_id);

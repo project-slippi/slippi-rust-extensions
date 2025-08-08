@@ -36,37 +36,6 @@ impl RankManager {
         }
     }
 
-    /// Spins up a background thread to fire off a rank fetch request.
-    ///
-    /// If a background thread is still ongoing, then this is a no-op. This can
-    /// happen if the background thread is in a retry loop.
-    pub fn fetch(&self) {
-        let mut thread = self.thread.lock().unwrap();
-
-        // If a user leaves and re-enters the CSS while a request is ongoing, we
-        // don't want to fire up multiple threads and issue multiple requests: limit
-        // things to one background thread at a time.
-        if thread.is_some() && !thread.as_ref().unwrap().is_finished() {
-            return;
-        }
-
-        let api_client = self.api_client.clone();
-        let connect_code = self.user_manager.get(|user| user.connect_code.clone());
-        let data = self.data.clone();
-
-        // Set the fetching status synchronously so the game will immediately see it
-        fetcher::set_status(&data, FetchStatus::Fetching);
-
-        let background_thread = thread::Builder::new()
-            .name("RankRequestThread".into())
-            .spawn(move || {
-                fetcher::run(api_client, connect_code, data);
-            })
-            .expect("Failed to spawn RankRequestThread.");
-
-        *thread = Some(background_thread);
-    }
-
     /// Fetches the match result for a given match ID.
     ///
     /// This will spin up a background thread to fetch the match result
@@ -108,6 +77,25 @@ impl RankManager {
         let mut data = self.data.lock().unwrap();
         data.fetch_status = FetchStatus::NotFetched;
         data.current_rank = None;
-        data.previous_rank = None;
+    }
+
+    /// Sets the user's initial rank data from the server response.
+    /// This is typically called during login to populate the current rank state.
+    pub fn set_user_rank(&self, rating_ordinal: f32, global_placing: u16, regional_placing: u16, rating_update_count: u32) {
+        let rank_idx = rank::decide(rating_ordinal, global_placing, regional_placing, rating_update_count) as i8;
+
+        let rank_info = RankInfo {
+            rank: rank_idx,
+            rating_ordinal,
+            global_placing,
+            regional_placing,
+            rating_update_count,
+            rating_change: 0.0, // No change on initial load
+            rank_change: 0,     // No change on initial load
+        };
+
+        let mut rank_data = self.data.lock().unwrap();
+        rank_data.current_rank = Some(rank_info);
+        rank_data.fetch_status = FetchStatus::Fetched;
     }
 }
