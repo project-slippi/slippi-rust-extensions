@@ -298,7 +298,7 @@ fn attempt_login(
     user_json_path: &PathBuf,
     slippi_semver: &str,
 ) -> bool {
-    let mut success = false;
+    let mut parse_successful = false;
 
     match std::fs::read_to_string(user_json_path) {
         Ok(contents) => match serde_json::from_str::<UserInfo>(&contents) {
@@ -311,13 +311,22 @@ fn attempt_login(
                     *lock = info;
                 }
 
+                parse_successful = true; // Will cause fn to return true
+
                 // Indicate rank is being fetched
                 rank_fetcher_status.set(RankFetchStatus::Fetching);
 
-                if let Err(error) = overwrite_from_server(api_client, user, rank, uid, slippi_semver) {
-                    tracing::error!(target: Log::SlippiOnline, ?error, "Failed to log in via server");
+                let api_res = overwrite_from_server(api_client, user, rank, uid, slippi_semver);
+
+                // Set ranked status to fetched if success, error if not
+                rank_fetcher_status.set(if api_res.is_ok() {
+                    RankFetchStatus::Fetched
                 } else {
-                    success = true;
+                    RankFetchStatus::Error
+                });
+
+                if let Err(error) = &api_res {
+                    tracing::error!(target: Log::SlippiOnline, ?error, "Failed to fetch user info from server");
                 }
             },
 
@@ -336,14 +345,7 @@ fn attempt_login(
         },
     }
 
-    // Set ranked status to fetched if success, error if not
-    rank_fetcher_status.set(if success {
-        RankFetchStatus::Fetched
-    } else {
-        RankFetchStatus::Error
-    });
-
-    success
+    parse_successful
 }
 
 /// The core payload that represents user information. This type is expected to conform

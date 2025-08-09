@@ -21,9 +21,9 @@ pub fn run_match_result(
 ) {
     let mut retry_index = 0;
 
-    loop {
-        status.set(RankFetchStatus::Fetching);
+    status.set(RankFetchStatus::Fetching);
 
+    loop {
         match fetch_match_result(&api_client, &match_id, &uid, &play_key) {
             Ok(response) => {
                 // If the match hasn't been processed yet, wait and retry
