@@ -37,7 +37,7 @@ where
     // utilities that everything else uses, along with having woeful documentation on how to parse
     // out custom datetime strings.
     //
-    // (Using a format of "[year][month][day]T[offset_hour][offset_minute][offset_second]" produces
+    // (Using a format of "[year][month][day]T[hour][minute][second]" produces
     // an error informing that there's insufficient information to parse, and there's nothing
     // further to debug past there. This code is something that will get ripped out in the future
     // anyway after enough time for people to be migrated to the unix timestamp format.)
@@ -50,7 +50,7 @@ where
             let date_fmt = format_description!("[year][month][day]");
             let date = Date::parse(&split[0], &date_fmt).map_err(serde::de::Error::custom)?;
 
-            let time_fmt = format_description!("[offset_hour][offset_minute][offset_second]");
+            let time_fmt = format_description!("[hour][minute][second]");
             let time = Time::parse(&split[1], &time_fmt).map_err(serde::de::Error::custom)?;
 
             return Ok(OffsetDateTime::new_utc(date, time));
@@ -70,5 +70,5 @@ where
 /*time::serde::format_description!(
     last_played_parser,
     OffsetDateTime,
-    "[year][month][day]T[offset_hour][offset_minute][offset_second]"
+    "[year][month][day]T[hour][minute][second]"
 );*/
