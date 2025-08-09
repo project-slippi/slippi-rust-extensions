@@ -272,7 +272,9 @@ impl UserManager {
 
     /// Logs the current user out and removes their `user.json` from the filesystem.
     pub fn logout(&mut self) {
+        // Reset rank state values to defaults
         self.rank = Arc::new(Mutex::new(RankInfo::default()));
+        self.rank_fetcher.status.set(RankFetchStatus::Error);
         self.set(|user| *user = UserInfo::default());
 
         if let Err(error) = std::fs::remove_file(self.user_json_path.as_path()) {
@@ -309,6 +311,9 @@ fn attempt_login(
                     *lock = info;
                 }
 
+                // Indicate rank is being fetched
+                rank_fetcher_status.set(RankFetchStatus::Fetching);
+
                 if let Err(error) = overwrite_from_server(api_client, user, rank, uid, slippi_semver) {
                     tracing::error!(target: Log::SlippiOnline, ?error, "Failed to log in via server");
                 } else {
@@ -331,10 +336,12 @@ fn attempt_login(
         },
     }
 
-    // This is likely already set in this case, but it doesn't hurt to be thorough.
-    if !success {
-        rank_fetcher_status.set(RankFetchStatus::Error);
-    }
+    // Set ranked status to fetched if success, error if not
+    rank_fetcher_status.set(if success {
+        RankFetchStatus::Fetched
+    } else {
+        RankFetchStatus::Error
+    });
 
     success
 }
@@ -402,7 +409,7 @@ fn overwrite_from_server(
     // @TODO: Switch this to a GraphQL call? Likely a Fizzi/Nikki task.
     let url = format!("{USER_API_URL}{is_beta}/{uid}?additionalFields=chatMessages,rank");
 
-    tracing::warn!(target: Log::SlippiOnline, ?url, "Fetching user info");
+    tracing::info!(target: Log::SlippiOnline, "Fetching user info");
 
     let info: UserInfoAPIResponse = api_client
         .get(&url)
