@@ -9,15 +9,13 @@ use std::time::Duration;
 
 use flate2::Compression;
 use flate2::write::GzEncoder;
-use serde_json::{Value, json};
+use serde_json::json;
 
 use dolphin_integrations::{Color, Dolphin, Duration as OSDDuration, Log};
-use slippi_gg_api::APIClient;
+use slippi_gg_api::{APIClient, GraphQLError};
 
 use crate::types::{GameReport, GameReportRequestPayload, OnlinePlayMode};
 use crate::{ProcessingEvent, StatusReportEvent};
-
-const GRAPHQL_URL: &str = "https://internal.slippi.gg/graphql";
 
 /// How many times a report should attempt to send.
 const MAX_REPORT_ATTEMPTS: i32 = 5;
@@ -116,19 +114,22 @@ pub fn report_match_status(api_client: &APIClient, uid: String, match_id: String
         }
     "#;
 
-    let variables = Some(json!({
+    let variables = json!({
         "report": {
             "matchId": match_id,
             "fbUid": uid,
             "playKey": play_key,
             "status": status,
         }
-    }));
+    });
 
-    let res = execute_graphql_query(api_client, mutation, variables, Some("reportOnlineMatchStatus"));
-
-    match res {
-        Ok(value) if value == "true" => {
+    match api_client
+        .graphql(mutation)
+        .variables(variables)
+        .data_field("/data/reportOnlineMatchStatus")
+        .send::<bool>()
+    {
+        Ok(value) if value => {
             tracing::info!(target: Log::SlippiOnline, "Successfully executed status report request: {status}")
         },
         Ok(value) => tracing::error!(target: Log::SlippiOnline, ?value, "Error executing status report request: {status}"),
@@ -239,13 +240,10 @@ fn process_reports(queue: &GameReporterQueue, event: ProcessingEvent) {
 #[derive(Debug)]
 enum ReportSendErrorKind {
     #[allow(dead_code)]
-    Net(slippi_gg_api::Error),
+    GraphQL(GraphQLError),
+
     #[allow(dead_code)]
-    JSON(serde_json::Error),
-    #[allow(dead_code)]
-    GraphQL(String),
-    #[allow(dead_code)]
-    NotSuccessful(String),
+    NotSuccessful,
 }
 
 /// Wraps errors that can occur during report sending.
@@ -294,84 +292,30 @@ fn try_send_next_report(
         }
     "#;
 
-    let variables = Some(json!({
+    let variables = json!({
         "report": payload,
-    }));
+    });
 
-    // Call execute_graphql_query and get the response body as a String.
-    let response_body =
-        execute_graphql_query(api_client, mutation, variables, Some("reportOnlineGame")).map_err(|e| ReportSendError {
+    let response: ReportResponse = api_client
+        .graphql(mutation)
+        .variables(variables)
+        .data_field("/data/reportOnlineGame")
+        .send()
+        .map_err(|error| ReportSendError {
             is_last_attempt,
             sleep_ms: error_sleep_ms,
-            kind: e,
+            kind: ReportSendErrorKind::GraphQL(error),
         })?;
-
-    // Now, parse the response JSON to get the data you need.
-    let response: ReportResponse = serde_json::from_str(&response_body).map_err(|e| ReportSendError {
-        is_last_attempt,
-        sleep_ms: error_sleep_ms,
-        kind: ReportSendErrorKind::JSON(e),
-    })?;
 
     if !response.success {
         return Err(ReportSendError {
             is_last_attempt,
             sleep_ms: error_sleep_ms,
-            kind: ReportSendErrorKind::NotSuccessful(response_body),
+            kind: ReportSendErrorKind::NotSuccessful,
         });
     }
 
     Ok(response.upload_url)
-}
-
-/// Prepares and executes a GraphQL query.
-fn execute_graphql_query(
-    api_client: &APIClient,
-    query: &str,
-    variables: Option<Value>,
-    field: Option<&str>,
-) -> Result<String, ReportSendErrorKind> {
-    // Prepare the GraphQL request payload
-    let request_body = match variables {
-        Some(vars) => json!({
-            "query": query,
-            "variables": vars,
-        }),
-        None => json!({
-            "query": query,
-        }),
-    };
-
-    // Make the GraphQL request
-    let response = api_client
-        .post(GRAPHQL_URL)
-        .send_json(&request_body)
-        .map_err(ReportSendErrorKind::Net)?;
-
-    // Parse the response JSON
-    let response_json: Value =
-        serde_json::from_str(&response.into_string().unwrap_or_default()).map_err(ReportSendErrorKind::JSON)?;
-
-    // Check for GraphQL errors
-    if let Some(errors) = response_json.get("errors") {
-        if errors.is_array() && !errors.as_array().unwrap().is_empty() {
-            let error_message = serde_json::to_string_pretty(errors).unwrap();
-            return Err(ReportSendErrorKind::GraphQL(error_message));
-        }
-    }
-
-    // Return the data response
-    if let Some(data) = response_json.get("data") {
-        let result = match field {
-            Some(field) => data.get(field).unwrap_or(data),
-            None => data,
-        };
-        Ok(result.to_string())
-    } else {
-        Err(ReportSendErrorKind::GraphQL(
-            "No 'data' field in the GraphQL response.".to_string(),
-        ))
-    }
 }
 
 /// Gzip compresses `input` data to `output` data.

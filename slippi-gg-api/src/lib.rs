@@ -5,6 +5,9 @@ use std::time::Duration;
 
 use ureq::{Agent, AgentBuilder, Resolver};
 
+mod graphql;
+pub use graphql::{GraphQLBuilder, GraphQLError};
+
 /// Re-export `ureq::Error` for simplicity.
 pub type Error = ureq::Error;
 
@@ -24,6 +27,12 @@ impl Resolver for Ipv4Resolver {
             vec
         })
     }
+}
+
+/// Default timeout that we use on client types. Extracted
+/// so that the GraphQLBuilder can also call it.
+pub(crate) fn default_timeout() -> Duration {
+    Duration::from_millis(5000)
 }
 
 /// A wrapper type that simply dereferences to a `ureq::Agent`.
@@ -61,11 +70,19 @@ impl APIClient {
         let http_client = AgentBuilder::new()
             .resolver(Ipv4Resolver)
             .max_idle_connections(5)
-            .timeout(Duration::from_millis(5000))
+            .timeout(default_timeout())
             .user_agent(&format!("SlippiDolphin/{} ({}) (Rust)", _build, slippi_semver))
             .build();
 
         Self(http_client)
+    }
+
+    /// Returns a type that can be used to construct GraphQL requests.
+    pub fn graphql<Query>(&self, query: Query) -> GraphQLBuilder
+    where
+        Query: Into<String>,
+    {
+        GraphQLBuilder::new(self.clone(), query.into())
     }
 }
 

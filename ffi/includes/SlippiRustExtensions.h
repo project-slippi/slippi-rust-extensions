@@ -46,6 +46,18 @@ typedef struct SlippiRustEXIConfig {
 } SlippiRustEXIConfig;
 
 /**
+ * Rank info that we vend back to the Dolphin side of things.
+ */
+typedef struct RustRankInfo {
+  int fetch_status;
+  char rank;
+  float rating_ordinal;
+  unsigned int rating_update_count;
+  float rating_change;
+  int rank_change;
+} RustRankInfo;
+
+/**
  * An intermediary type for moving `UserInfo` across the FFI boundary.
  *
  * This type is C compatible, and we coerce Rust types into C types for this struct to
@@ -256,6 +268,16 @@ void slprs_logging_update_container(const char *kind, bool enabled, int level);
  * For more information, see `dolphin_logger::update_container`.
  */
 void slprs_mainline_logging_update_log_level(int level);
+
+/**
+ * Fetches the result of a recently played match via its ID.
+ */
+void slprs_fetch_match_result(uintptr_t exi_device_instance_ptr, const char *match_id);
+
+/**
+ * Gets the most recently fetched rank information of the user currently logged in.
+ */
+struct RustRankInfo slprs_get_rank_info(uintptr_t exi_device_instance_ptr);
 
 /**
  * Instructs the `UserManager` on the EXI Device at the provided pointer to attempt

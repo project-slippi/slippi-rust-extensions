@@ -1255,6 +1255,10 @@ dependencies = [
 name = "slippi-gg-api"
 version = "0.1.0"
 dependencies = [
+ "dolphin-integrations",
+ "serde",
+ "serde_json",
+ "thiserror",
  "tracing",
  "ureq",
 ]
@@ -1279,8 +1283,10 @@ dependencies = [
  "serde",
  "serde_json",
  "slippi-gg-api",
+ "thiserror",
  "time",
  "tracing",
+ "ureq",
 ]
 
 [[package]]
