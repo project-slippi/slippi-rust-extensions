@@ -1,9 +1,10 @@
-//! This module contains data models and helper methods for handling user authentication
-//! from within Slippi Dolphin.
+//! This module contains data models and helper methods for handling user authentication and
+//! interaction from within Slippi Dolphin.
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use dolphin_integrations::Log;
 use slippi_gg_api::APIClient;
 
 mod chat;
@@ -11,6 +12,10 @@ pub use chat::DEFAULT_CHAT_MESSAGES;
 
 mod direct_codes;
 use direct_codes::DirectCodes;
+
+mod rank_fetcher;
+pub use rank_fetcher::RankFetchStatus;
+use rank_fetcher::{RankFetcher, RankFetcherStatus, SlippiRank};
 
 mod watcher;
 use watcher::UserInfoWatcher;
@@ -50,6 +55,18 @@ impl UserInfo {
     }
 }
 
+/// Represents a slice of rank information from the Slippi server.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RankInfo {
+    pub rank: i8,
+    pub rating_ordinal: f32,
+    pub global_placing: u16,
+    pub regional_placing: u16,
+    pub rating_update_count: u32,
+    pub rating_change: f32,
+    pub rank_change: i8,
+}
+
 /// A thread-safe handle for the User Manager. This uses an `Arc` under the hood, so you don't
 /// need to do so if you're storing it.
 ///
@@ -60,11 +77,13 @@ impl UserInfo {
 pub struct UserManager {
     api_client: APIClient,
     user: Arc<Mutex<UserInfo>>,
+    rank: Arc<Mutex<RankInfo>>,
     user_json_path: Arc<PathBuf>,
     pub direct_codes: DirectCodes,
     pub teams_direct_codes: DirectCodes,
     slippi_semver: String,
     watcher: Arc<Mutex<UserInfoWatcher>>,
+    rank_fetcher: RankFetcher,
 }
 
 impl UserManager {
@@ -74,6 +93,7 @@ impl UserManager {
     /// live. This is an OS-specific value and we currently need to share it with Dolphin,
     /// so this should be passed via the FFI layer. In the future, we may be able to remove
     /// this restriction via some assumptions.
+    ///
     // @TODO: The semver param here should get refactored away in time once we've ironed out
     // how some things get persisted from the Dolphin side. Not a big deal to thread it for now.
     pub fn new(api_client: APIClient, mut user_config_folder: PathBuf, slippi_semver: String) -> Self {
@@ -95,16 +115,21 @@ impl UserManager {
         });
 
         let user = Arc::new(Mutex::new(UserInfo::default()));
+        let rank = Arc::new(Mutex::new(RankInfo::default()));
+
         let watcher = Arc::new(Mutex::new(UserInfoWatcher::new()));
+        let rank_fetcher = RankFetcher::new();
 
         Self {
             api_client,
             user,
+            rank,
             user_json_path,
             direct_codes,
             teams_direct_codes,
             slippi_semver,
             watcher,
+            rank_fetcher,
         }
     }
 
@@ -158,7 +183,14 @@ impl UserManager {
     /// Runs the `attempt_login` function on the calling thread. If you need this to run in the
     /// background, you want `watch_for_login` instead.
     pub fn attempt_login(&self) -> bool {
-        attempt_login(&self.api_client, &self.user, &self.user_json_path, &self.slippi_semver)
+        attempt_login(
+            &self.api_client,
+            &self.user,
+            &self.rank,
+            &self.rank_fetcher.status,
+            &self.user_json_path,
+            &self.slippi_semver,
+        )
     }
 
     /// Kicks off a background handler for processing user authentication.
@@ -166,9 +198,11 @@ impl UserManager {
         let mut watcher = self.watcher.lock().expect("Unable to acquire user watcher lock");
 
         watcher.watch_for_login(
-            self.api_client.clone(),
-            self.user_json_path.clone(),
-            self.user.clone(),
+            &self.api_client,
+            &self.user_json_path,
+            &self.user,
+            &self.rank,
+            &self.rank_fetcher.status,
             &self.slippi_semver,
         );
     }
@@ -181,15 +215,15 @@ impl UserManager {
         if let Some(path) = path_ref.to_str() {
             let url = format!("https://slippi.gg/online/enable?path={path}");
 
-            tracing::info!("[User] Login at path: {}", url);
+            tracing::info!(target: Log::SlippiOnline, "[User] Login at path: {}", url);
 
             if let Err(error) = open::that_detached(&url) {
-                tracing::error!(?error, ?url, "Failed to open login page");
+                tracing::error!(target: Log::SlippiOnline, ?error, ?url, "Failed to open login page");
             }
         } else {
             // This should never really happen, but it's conceivable that some odd unicode path
             // errors could happen... so just dump a log I guess.
-            tracing::warn!(?path_ref, "Unable to convert user.json path to UTF-8 string");
+            tracing::warn!(target: Log::SlippiOnline, ?path_ref, "Unable to convert user.json path to UTF-8 string");
         }
     }
 
@@ -197,7 +231,7 @@ impl UserManager {
     /// by, but still used.
     pub fn update_app(&self) -> bool {
         if let Err(error) = open::that_detached("https://slippi.gg/downloads?update=true") {
-            tracing::error!(?error, "Failed to open update URL");
+            tracing::error!(target: Log::SlippiOnline, ?error, "Failed to open update URL");
             return false;
         }
 
@@ -218,12 +252,33 @@ impl UserManager {
         });
     }
 
+    /// Gets the current rank state (even if blank), along with the current status of
+    /// any ongoing fetch operations.
+    pub fn current_rank_and_status(&self) -> (RankInfo, RankFetchStatus) {
+        let data = self.rank.lock().unwrap();
+        let status = self.rank_fetcher.status.get();
+
+        (*data, status)
+    }
+
+    /// Instructs the rank manager to check for any rank updates.
+    pub fn fetch_match_result(&self, match_id: String) {
+        let client = self.api_client.clone();
+        let (uid, play_key) = self.get(|user| (user.uid.clone(), user.play_key.clone()));
+        let rank = self.rank.clone();
+
+        self.rank_fetcher.fetch_match_result(client, match_id, uid, play_key, rank);
+    }
+
     /// Logs the current user out and removes their `user.json` from the filesystem.
     pub fn logout(&mut self) {
+        // Reset rank state values to defaults
+        self.rank = Arc::new(Mutex::new(RankInfo::default()));
+        self.rank_fetcher.status.set(RankFetchStatus::Error);
         self.set(|user| *user = UserInfo::default());
 
         if let Err(error) = std::fs::remove_file(self.user_json_path.as_path()) {
-            tracing::error!(?error, "Failed to remove user.json on logout");
+            tracing::error!(target: Log::SlippiOnline, ?error, "Failed to remove user.json on logout");
         }
 
         let mut watcher = self.watcher.lock().expect("Unable to acquire watcher lock on user logout");
@@ -235,7 +290,16 @@ impl UserManager {
 /// Checks for the existence of a `user.json` file and, if found, attempts to load and parse it.
 ///
 /// This returns a `bool` value so that the background thread can know whether to stop checking.
-fn attempt_login(api_client: &APIClient, user: &Arc<Mutex<UserInfo>>, user_json_path: &PathBuf, slippi_semver: &str) -> bool {
+fn attempt_login(
+    api_client: &APIClient,
+    user: &Mutex<UserInfo>,
+    rank: &Mutex<RankInfo>,
+    rank_fetcher_status: &RankFetcherStatus,
+    user_json_path: &PathBuf,
+    slippi_semver: &str,
+) -> bool {
+    let mut parse_successful = false;
+
     match std::fs::read_to_string(user_json_path) {
         Ok(contents) => match serde_json::from_str::<UserInfo>(&contents) {
             Ok(mut info) => {
@@ -244,18 +308,31 @@ fn attempt_login(api_client: &APIClient, user: &Arc<Mutex<UserInfo>>, user_json_
                 let uid = info.uid.clone();
                 {
                     let mut lock = user.lock().expect("Unable to lock user in attempt_login");
-
                     *lock = info;
                 }
 
-                overwrite_from_server(api_client, user, uid, slippi_semver);
-                return true;
+                parse_successful = true; // Will cause fn to return true
+
+                // Indicate rank is being fetched
+                rank_fetcher_status.set(RankFetchStatus::Fetching);
+
+                let api_res = overwrite_from_server(api_client, user, rank, uid, slippi_semver);
+
+                // Set ranked status to fetched if success, error if not
+                rank_fetcher_status.set(if api_res.is_ok() {
+                    RankFetchStatus::Fetched
+                } else {
+                    RankFetchStatus::Error
+                });
+
+                if let Err(error) = &api_res {
+                    tracing::error!(target: Log::SlippiOnline, ?error, "Failed to fetch user info from server");
+                }
             },
 
             // JSON parsing error
             Err(error) => {
-                tracing::error!(?error, "Unable to parse user.json");
-                return false;
+                tracing::error!(target: Log::SlippiOnline, ?error, "Unable to parse user.json");
             },
         },
 
@@ -263,12 +340,12 @@ fn attempt_login(api_client: &APIClient, user: &Arc<Mutex<UserInfo>>, user_json_
         Err(error) => {
             // A not-found file just means they haven't logged in yet... presumably.
             if error.kind() != std::io::ErrorKind::NotFound {
-                tracing::error!(?error, "Unable to read user.json");
+                tracing::error!(target: Log::SlippiOnline, ?error, "Unable to read user.json");
             }
-
-            return false;
         },
     }
+
+    parse_successful
 }
 
 /// The core payload that represents user information. This type is expected to conform
@@ -288,51 +365,87 @@ struct UserInfoAPIResponse {
 
     #[serde(alias = "chatMessages")]
     pub chat_messages: Vec<String>,
+
+    #[serde(alias = "rank")]
+    pub rank: UserRankInfo,
+}
+
+#[derive(Debug, Default, serde::Deserialize)]
+pub struct UserRankInfo {
+    #[serde(alias = "ratingOrdinal")]
+    pub rating_ordinal: f32,
+
+    #[serde(alias = "dailyGlobalPlacement")]
+    pub global_placing: Option<u16>,
+
+    #[serde(alias = "dailyRegionalPlacement")]
+    pub regional_placing: Option<u16>,
+
+    #[serde(alias = "ratingUpdateCount")]
+    pub rating_update_count: u32,
+}
+
+#[derive(Debug, thiserror::Error)]
+enum APILoginError {
+    #[error(transparent)]
+    Client(ureq::Error),
+
+    #[error(transparent)]
+    IO(std::io::Error),
 }
 
 /// Calls out to the Slippi server and fetches the user info, patching up the user info object
 /// with any returned information.
-fn overwrite_from_server(api_client: &APIClient, user: &Arc<Mutex<UserInfo>>, uid: String, slippi_semver: &str) {
+fn overwrite_from_server(
+    api_client: &APIClient,
+    user: &Mutex<UserInfo>,
+    rank: &Mutex<RankInfo>,
+    uid: String,
+    slippi_semver: &str,
+) -> Result<(), APILoginError> {
     let is_beta = match slippi_semver.contains("beta") {
         true => "-beta",
         false => "",
     };
 
     // @TODO: Switch this to a GraphQL call? Likely a Fizzi/Nikki task.
-    let url = format!("{USER_API_URL}{is_beta}/{uid}?additionalFields=chatMessages");
+    let url = format!("{USER_API_URL}{is_beta}/{uid}?additionalFields=chatMessages,rank");
 
-    tracing::warn!(?url, "Fetching user info");
+    tracing::info!(target: Log::SlippiOnline, "Fetching user info");
 
-    match api_client.get(&url).call() {
-        Ok(response) => match response.into_string() {
-            Ok(body) => match serde_json::from_str::<UserInfoAPIResponse>(&body) {
-                Ok(info) => {
-                    let mut lock = user.lock().expect("Unable to lock user in attempt_login");
+    let info: UserInfoAPIResponse = api_client
+        .get(&url)
+        .call()
+        .map_err(APILoginError::Client)?
+        .into_json()
+        .map_err(APILoginError::IO)?;
 
-                    lock.uid = info.uid;
-                    lock.display_name = info.display_name;
-                    lock.connect_code = info.connect_code;
-                    lock.latest_version = info.latest_version;
-                    lock.chat_messages = Some(info.chat_messages);
+    let mut lock = user.lock().unwrap();
+    lock.uid = info.uid;
+    lock.display_name = info.display_name;
+    lock.connect_code = info.connect_code;
+    lock.latest_version = info.latest_version;
+    lock.chat_messages = Some(info.chat_messages);
+    (*lock).sanitize();
 
-                    (*lock).sanitize();
-                },
+    let rank_idx = SlippiRank::decide(
+        info.rank.rating_ordinal,
+        info.rank.global_placing.unwrap_or(0),
+        info.rank.regional_placing.unwrap_or(0),
+        info.rank.rating_update_count,
+    ) as i8;
 
-                Err(error) => {
-                    tracing::error!(?error, "Unable to deserialize user info API payload");
-                },
-            },
+    let mut lock = rank.lock().unwrap();
 
-            // Failed to read into a string, usually an I/O error.
-            Err(error) => {
-                tracing::error!(?error, "Unable to read user info response body");
-            },
-        },
+    *lock = RankInfo {
+        rank: rank_idx,
+        rating_ordinal: info.rank.rating_ordinal,
+        global_placing: info.rank.global_placing.unwrap_or(0),
+        regional_placing: info.rank.regional_placing.unwrap_or(0),
+        rating_update_count: info.rank.rating_update_count,
+        rating_change: 0.0, // No change on initial load
+        rank_change: 0,     // No change on initial load
+    };
 
-        // `error` is an enum, where one branch will contain the status code if relevant.
-        // We log the debug representation to just see it all.
-        Err(error) => {
-            tracing::error!(?error, "API call for user info failed");
-        },
-    }
+    Ok(())
 }
