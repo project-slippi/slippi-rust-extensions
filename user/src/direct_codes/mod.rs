@@ -7,7 +7,7 @@ use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use time::OffsetDateTime;
+use chrono::{DateTime, Utc};
 
 use dolphin_integrations::Log;
 
@@ -30,7 +30,7 @@ pub struct DirectCode {
     pub connect_code: String,
 
     #[serde(rename = "lastPlayed", alias = "last_played", with = "last_played_parser")]
-    pub last_played: OffsetDateTime,
+    pub last_played: DateTime<Utc>,
     // This doesn't exist yet and is stubbed to match the C++ version,
     // which had some inkling of it - and could always be used in the
     // future.
@@ -127,7 +127,8 @@ impl DirectCodes {
     pub fn add_or_update_code(&self, code: String) {
         tracing::warn!(target: Log::SlippiOnline, ?code, "Attempting to add or update direct code");
 
-        let last_played = OffsetDateTime::now_utc();
+        // Create UTC timestamp (equivalent to the old OffsetDateTime::now_utc())
+        let last_played = Utc::now();
 
         let mut codes = self.codes.lock().expect("Unable to lock codes for autocomplete");
 
@@ -194,5 +195,83 @@ impl DirectCodes {
                 );
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{TimeZone, Utc};
+    use serde_json;
+
+    #[test]
+    fn test_legacy_timestamp_deserialization() {
+        use serde_json::json;
+
+        // This should represent Jan 1, 2022, 00:00:00 UTC
+        let legacy_timestamp_str = "20220101T000000";
+        let expected_timestamp = 1640995200i64;
+
+        // mocked JSON that matches the DirectCode struct’s fields
+        let json_data = json!({
+            "connectCode": "TEST#LEGACY",
+            "lastPlayed": legacy_timestamp_str
+        });
+
+        // Deserialize into DirectCode
+        let deserialized: DirectCode = serde_json::from_value(json_data).unwrap();
+
+        // Check that the timestamp matches
+        assert_eq!(deserialized.connect_code, "TEST#LEGACY");
+        assert_eq!(deserialized.last_played.timestamp(), expected_timestamp);
+    }
+
+    #[test]
+    fn test_direct_code_serialization_roundtrip() {
+        let known_timestamp = 1640995200i64; // 2022-01-01 00:00:00 UTC
+        let known_datetime = Utc.timestamp_opt(known_timestamp, 0).unwrap();
+
+        let direct_code = DirectCode {
+            connect_code: "TEST#KNOWN".to_string(),
+            last_played: known_datetime,
+        };
+
+        // Serialize to JSON
+        let json = serde_json::to_value(&direct_code).unwrap();
+
+        assert_eq!(json["connectCode"], "TEST#KNOWN");
+        assert_eq!(json["lastPlayed"], known_timestamp);
+
+        // Verify we can deserialize it
+        let deserialized: DirectCode = serde_json::from_value(json).unwrap();
+        assert_eq!(deserialized.connect_code, "TEST#KNOWN");
+        assert_eq!(deserialized.last_played.timestamp(), known_timestamp);
+    }
+
+    #[test]
+    fn test_timestamp_ordering_behavior() {
+        use std::path::PathBuf;
+        use std::thread;
+        use std::time::Duration;
+
+        let dummy_path = PathBuf::from("");
+        let direct_codes = DirectCodes::load(dummy_path);
+
+        // Add codes with slight delays to ensure different timestamps
+        direct_codes.add_or_update_code("FRST#001".to_string());
+        thread::sleep(Duration::from_millis(5));
+        direct_codes.add_or_update_code("SCND#002".to_string());
+        thread::sleep(Duration::from_millis(5));
+
+        // Most recently added or updated should be first
+        assert_eq!(direct_codes.get(0), "SCND#002");
+        assert_eq!(direct_codes.get(1), "FRST#001");
+
+        // Update the first code, should move it to front
+        direct_codes.add_or_update_code("FRST#001".to_string());
+
+        // Now FIRST should be first
+        assert_eq!(direct_codes.get(0), "FRST#001");
+        assert_eq!(direct_codes.get(1), "SCND#002");
     }
 }
