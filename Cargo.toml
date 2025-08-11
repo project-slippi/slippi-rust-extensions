@@ -16,7 +16,7 @@ members = [
 
 # Ship the resulting dylib with debug information so we can figure out
 # crashes easier, and swap panic behavior to "abort" to match C++ behavior.
-# 
+#
 # We don't want to panic and attempt to unwind into C/C++ since that can cause
 # undefined behavior.
 [profile.release]
@@ -24,7 +24,7 @@ debug = true
 panic = "abort"
 
 [workspace.dependencies]
-time = { version = "0.3.41", default-features = false, features = ["formatting", "parsing", "local-offset", "macros", "serde", "std"] }
+chrono = { version = "0.4.41" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
 serde_repr = { version = "0.1" }

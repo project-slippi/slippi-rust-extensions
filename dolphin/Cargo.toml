@@ -2,10 +2,7 @@
 name = "dolphin-integrations"
 description = "Shims for calling back into C++ for Dolphin-specific functionality."
 version = "0.1.0"
-authors = [
-    "Slippi Team",
-    "Ryan McGrath <ryan@rymc.io>"
-]
+authors = ["Slippi Team", "Ryan McGrath <ryan@rymc.io>"]
 edition = "2024"
 publish = false
 
@@ -16,7 +13,7 @@ mainline = []
 playback = []
 
 [dependencies]
-time = { workspace = true }
+chrono = { workspace = true }
 
 # We disable the "attributes" feature as we don't currently need it and it brings
 # in extra dependencies.
