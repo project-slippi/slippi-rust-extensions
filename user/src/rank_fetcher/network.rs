@@ -171,8 +171,9 @@ fn update_rank(rank_data: &Mutex<RankInfo>, response: MatchResultAPIResponse) {
     // changed since they only update once daily anyway. Also assume that update count
     // has incremented by 1. This could technically be incorrect but it would only matter
     // during placement matches so probably not a huge deal
+    let count_update = response.participant.post_match_rating_change.map_or(0, |_| 1);
     rank_info.rating_ordinal += rank_info.rating_change;
-    rank_info.rating_update_count += 1;
+    rank_info.rating_update_count += count_update;
 
     // Determine new rank index and rank change
     rank_info.rank = get_rank_idx_from_info(&rank_info);
