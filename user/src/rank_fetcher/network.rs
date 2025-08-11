@@ -30,7 +30,7 @@ pub fn run_match_result(
                 if response.status == MatchStatus::Assigned {
                     retry_index += 1;
                     if retry_index < 3 {
-                        sleep(Duration::from_secs(2));
+                        sleep(Duration::from_secs(3));
                         continue;
                     }
                 }
@@ -169,8 +169,8 @@ fn update_rank(rank_data: &Mutex<RankInfo>, response: MatchResultAPIResponse) {
 
     // Use rating change to update the rating_ordinal. Assume that the placements havent
     // changed since they only update once daily anyway. Also assume that update count
-    // has incremented by 1. This could technically be incorrect but it would only matter
-    // during placement matches so probably not a huge deal
+    // has incremented by 1. This could technically be incorrect in the case of an abandon
+    // report but it would only matter during placement matches so probably not a huge deal
     let count_update = response.participant.post_match_rating_change.map_or(0, |_| 1);
     rank_info.rating_ordinal += rank_info.rating_change;
     rank_info.rating_update_count += count_update;
