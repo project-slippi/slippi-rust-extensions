@@ -92,7 +92,7 @@ impl SlippiRank {
             return SlippiRank::Diamond3;
         }
 
-        if rating_ordinal >= 2191.75 && global_placing > 0 && regional_placing > 0 {
+        if rating_ordinal >= 2191.75 && (global_placing > 0 || regional_placing > 0) {
             return SlippiRank::Grandmaster;
         }
 
