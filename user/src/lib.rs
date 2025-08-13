@@ -10,7 +10,8 @@ use slippi_gg_api::APIClient;
 mod chat;
 pub use chat::DEFAULT_CHAT_MESSAGES;
 
-mod direct_codes;
+// TODO: Make this private once tests/timestamp_compatibility.rs is removed
+pub mod direct_codes;
 use direct_codes::DirectCodes;
 
 mod rank_fetcher;

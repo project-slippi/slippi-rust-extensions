@@ -19,10 +19,20 @@ playback = []
 dolphin-integrations = { path = "../dolphin" }
 slippi-gg-api = { path = "../slippi-gg-api" }
 
+chrono = { workspace = true }
 open = "5"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-time = { workspace = true }
 tracing = { workspace = true }
 ureq = { workspace = true }
+
+[dev-dependencies]
+time = { version = "0.3.41", default-features = false, features = [
+    "formatting",
+    "parsing",
+    "local-offset",
+    "macros",
+    "serde",
+    "std",
+] }

@@ -5,7 +5,7 @@ use std::ffi::CString;
 use std::fmt::Write;
 use std::os::raw::{c_char, c_int};
 
-use time::OffsetDateTime;
+use chrono::{DateTime, FixedOffset, Local, Timelike};
 use tracing::{Level, Metadata};
 use tracing_subscriber::Layer;
 
@@ -153,34 +153,16 @@ impl DolphinLoggerVisitor {
         let level = metadata.level();
 
         // Dolphin logs in the format of {Minutes}:{Seconds}:{Milliseconds}.
-        let time = OffsetDateTime::now_local().unwrap_or_else(|e| {
-            eprintln!("[dolphin_logger/layer.rs] Failed to get local time: {:?}", e);
+        // Get local time with proper timezone handling
+        let local_time: DateTime<Local> = Local::now();
+        let time: DateTime<FixedOffset> = local_time.with_timezone(local_time.offset());
 
-            // This will only happen if, for whatever reason, the timezone offset
-            // on the current system cannot be determined. Frankly there's bigger issues
-            // than logging if that's the case.
-            OffsetDateTime::now_utc()
-        });
+        // Extract milliseconds for Dolphin's log format (chrono doesn't have milliseconds API)
+        let milliseconds: u32 = time.nanosecond() / 1_000_000;
 
-        let mins = time.minute();
-        let secs = time.second();
-        let millsecs = time.millisecond();
+        let formatted_time_string: String = time.format("%M:%S").to_string() + &format!(":{}", milliseconds);
 
-        // We want 0-padded mins/secs, but we don't need the entire formatting infra
-        // that time would use - and this is simple enough to just do in a few lines.
-        let mp = match mins < 10 {
-            true => "0",
-            false => "",
-        };
-
-        let sp = match secs < 10 {
-            true => "0",
-            false => "",
-        };
-
-        Self(format!(
-            "{mp}{mins}:{sp}{secs}:{millsecs} {file}:{line} {level}[{log_type}]: "
-        ))
+        Self(format!("{} {file}:{line} {level}[{log_type}]: ", formatted_time_string))
     }
 
     /// The Dolphin log window needs a newline attached to the end, so we just write one

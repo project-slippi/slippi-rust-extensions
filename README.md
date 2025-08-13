@@ -73,3 +73,17 @@ The following line will format the entire project
 ```
 cargo fmt --all --manifest-path=./Cargo.toml
 ```
+
+## Testing
+Run all tests across the workspace:
+```bash
+cargo test --workspace
+```
+
+Run tests for specific library:
+```bash
+cargo test -p <lib_name>
+
+# for example
+cargo test -p slippi-user
+```
