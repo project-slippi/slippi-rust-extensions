@@ -9,6 +9,7 @@ use dolphin_integrations::Log;
 use slippi_game_reporter::GameReporter;
 use slippi_gg_api::APIClient;
 use slippi_jukebox::Jukebox;
+use slippi_playback::PlaybackEngine;
 use slippi_user::UserManager;
 
 mod config;
@@ -21,6 +22,7 @@ pub struct SlippiEXIDevice {
     pub game_reporter: GameReporter,
     pub user_manager: UserManager,
     pub jukebox: Option<Jukebox>,
+    pub playback: Option<PlaybackEngine>,
 }
 
 pub enum JukeboxConfiguration {
@@ -53,11 +55,27 @@ impl SlippiEXIDevice {
         #[cfg(not(feature = "playback"))]
         user_manager.watch_for_login();
 
+        // Set up playback
+        let playback = if cfg!(feature = "playback") {
+            Some(PlaybackEngine::new_with_defaults(
+                config.paths.playback_comm_file_path.clone(),
+            ))
+        } else {
+            None
+        };
+
+        #[cfg(feature = "ishiiruka")]
+        tracing::warn!(target: Log::SlippiOnline, "Ishiiruka feature is enabled");
+
+        #[cfg(feature = "mainline")]
+        tracing::warn!(target: Log::SlippiOnline, "Mainline feature is enabled");
+
         Self {
             config,
             game_reporter,
             user_manager,
             jukebox: None,
+            playback: playback,
         }
     }
 

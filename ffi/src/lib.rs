@@ -13,6 +13,9 @@ pub mod exi;
 pub mod game_reporter;
 pub mod jukebox;
 pub mod logger;
+#[cfg(feature = "playback")]
+pub mod playback;
+
 pub mod rank_info;
 pub mod user;
 

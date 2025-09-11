@@ -17,6 +17,7 @@ pub struct SlippiRustEXIConfig {
     // Paths
     pub iso_path: *const c_char,
     pub user_config_folder: *const c_char,
+    pub playback_comm_file_path: *const c_char,
 
     // Git version number
     pub scm_slippi_semver_str: *const c_char,
@@ -53,6 +54,7 @@ pub extern "C" fn slprs_exi_device_create(config: SlippiRustEXIConfig) -> usize 
         paths: FilePathsConfig {
             iso: c_str_to_string(config.iso_path, fn_name, "iso_path"),
             user_config_folder: c_str_to_string(config.user_config_folder, fn_name, "user_config_folder"),
+            playback_comm_file_path: c_str_to_string(config.playback_comm_file_path, fn_name, "playback_comm_file_path"),
         },
 
         scm: SCMConfig {

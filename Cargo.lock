@@ -1232,6 +1232,7 @@ dependencies = [
  "slippi-game-reporter",
  "slippi-gg-api",
  "slippi-jukebox",
+ "slippi-playback",
  "slippi-user",
  "tracing",
 ]
@@ -1271,6 +1272,18 @@ dependencies = [
  "hps_decode",
  "rodio",
  "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "slippi-playback"
+version = "0.1.0"
+dependencies = [
+ "dolphin-integrations",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "time",
  "tracing",
 ]
 

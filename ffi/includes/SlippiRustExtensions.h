@@ -41,6 +41,7 @@ typedef enum SlippiMatchmakingOnlinePlayMode {
 typedef struct SlippiRustEXIConfig {
   const char *iso_path;
   const char *user_config_folder;
+  const char *playback_comm_file_path;
   const char *scm_slippi_semver_str;
   void (*osd_add_msg_fn)(const char*, uint32_t, uint32_t);
 } SlippiRustEXIConfig;

@@ -3,6 +3,7 @@
 pub struct FilePathsConfig {
     pub iso: String,
     pub user_config_folder: String,
+    pub playback_comm_file_path: String,
 }
 
 /// Source control semver related parameters.

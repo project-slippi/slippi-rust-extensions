@@ -27,4 +27,5 @@ slippi-game-reporter = { path = "../game-reporter" }
 slippi-gg-api = { path = "../slippi-gg-api" }
 slippi-jukebox = { path = "../jukebox" }
 slippi-user = { path = "../user" }
+slippi-playback = { path = "../playback" }
 tracing = { workspace = true }
