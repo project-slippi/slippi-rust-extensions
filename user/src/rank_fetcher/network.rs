@@ -27,7 +27,7 @@ pub fn run_match_result(
         match fetch_match_result(&api_client, &match_id, &uid, &play_key) {
             Ok(response) => {
                 // If the match hasn't been processed yet, wait and retry
-                if response.status == MatchStatus::Assigned {
+                if response.participant.post_match_rating_change.is_none() {
                     retry_index += 1;
                     if retry_index < 3 {
                         sleep(Duration::from_secs(3));
@@ -100,9 +100,6 @@ impl Default for MatchStatus {
 
 #[derive(Clone, Copy, Debug, Default, serde::Deserialize)]
 struct MatchResultAPIResponse {
-    #[serde(alias = "status")]
-    pub status: MatchStatus,
-
     // Include the participant
     #[serde(alias = "participant")]
     pub participant: MatchResultParticipant,
@@ -117,7 +114,6 @@ fn fetch_match_result(
     let query = r#"
         query ($request: OnlineMatchRequestInput!) {
             getRankedMatchPersonalResult(request: $request) {
-                status
                 participant {
                     ordinal
                     dailyGlobalPlacement
