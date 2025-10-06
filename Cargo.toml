@@ -35,5 +35,3 @@ thiserror = { version = "1.0.44" }
 tracing = { version = "0.1", default-features = false, features = ["std"] }
 
 ureq = { version = "2.9.1", features = ["json"] }
-
-cpal = { version = "0.16.0" }

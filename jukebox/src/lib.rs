@@ -5,7 +5,7 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 
 use dolphin_integrations::{Color, Dolphin, Duration as OSDDuration, Log};
 use hps_decode::Hps;
-use rodio::{OutputStream, Sink};
+use rodio::{OutputStreamBuilder, Sink};
 
 use crate::Message::*;
 
@@ -92,8 +92,8 @@ impl Jukebox {
         initial_dolphin_system_volume: u8,
         initial_dolphin_music_volume: u8,
     ) -> Result<()> {
-        let (_stream, stream_handle) = OutputStream::try_default()?;
-        let sink = Sink::try_new(&stream_handle)?;
+        let stream_handle = OutputStreamBuilder::open_default_stream()?;
+        let sink = Sink::connect_new(&stream_handle.mixer());
 
         let mut iso = File::open(&iso_path)?;
         let get_real_offset = disc::create_offset_locator_fn(&mut iso)?;
@@ -132,8 +132,8 @@ impl Jukebox {
                     };
 
                     // Decode the Hps into audio
-                    let audio = match hps.decode() {
-                        Ok(audio) => audio,
+                    let source = match hps.decode() {
+                        Ok(audio) => audio.into_rodio_source(),
                         Err(e) => {
                             tracing::error!(target: Log::Jukebox, error = ?e, "Failed to decode hps into audio. Cannot play song.");
                             Dolphin::add_osd_message(
@@ -146,7 +146,7 @@ impl Jukebox {
                     };
 
                     // Play the song
-                    sink.append(audio);
+                    sink.append(source);
                     sink.play();
                 },
                 SetVolume(control, volume) => {
