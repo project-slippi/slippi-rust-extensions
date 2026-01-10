@@ -54,6 +54,7 @@ impl APIClient {
     /// due to upstream issues with GCP flex instances and IPV6.
     pub fn new(slippi_semver: &str) -> Self {
         let _build = "";
+        let os = std::env::consts::OS;
 
         #[cfg(feature = "mainline")]
         let _build = "mainline";
@@ -71,7 +72,7 @@ impl APIClient {
             .resolver(Ipv4Resolver)
             .max_idle_connections(5)
             .timeout(default_timeout())
-            .user_agent(&format!("SlippiDolphin/{} ({}) (Rust)", _build, slippi_semver))
+            .user_agent(&format!("SlippiDolphin (b: {_build}) (v: {slippi_semver}) (o: {os})"))
             .build();
 
         Self(http_client)
