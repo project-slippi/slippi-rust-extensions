@@ -1,10 +1,21 @@
-use std::ffi::c_char;
+use std::ffi::{c_char, c_int};
 
 use dolphin_integrations::Log;
 use slippi_exi_device::{Config, FilePathsConfig, JukeboxConfiguration, SCMConfig, SlippiEXIDevice};
 use slippi_game_reporter::GameReport;
+use slippi_game_reporter::{IsoMd5CheckResult, IsoMd5CheckState};
 
-use crate::c_str_to_string;
+use crate::{c_str_to_string, with_returning};
+
+/// ISO MD5 status and final outcome that we vend back over FFI.
+#[repr(C)]
+pub struct RustIsoMd5Check {
+    /// 0 = NotStarted, 1 = InProgress, 2 = Complete
+    pub status: c_int,
+
+    /// 0 = Unknown, 1 = SafeIso, 2 = KnownDesyncIso, 3 = Failed
+    pub result: c_int,
+}
 
 /// A configuration struct for passing over certain argument types from the C/C++ side.
 ///
@@ -201,6 +212,27 @@ pub extern "C" fn slprs_exi_device_reporter_push_replay_data(instance_ptr: usize
 
     // Fall back into a raw pointer so Rust doesn't obliterate the object.
     let _leak = Box::into_raw(device);
+}
+
+/// Gets the status and result of the background ISO MD5 check.
+#[unsafe(no_mangle)]
+pub extern "C" fn slprs_get_iso_md5_check(exi_device_instance_ptr: usize) -> RustIsoMd5Check {
+    with_returning::<SlippiEXIDevice, _, _>(exi_device_instance_ptr, |device| {
+        let state = device.game_reporter.iso_md5_check_state();
+
+        match state {
+            IsoMd5CheckState::NotStarted => RustIsoMd5Check { status: 0, result: 0 },
+            IsoMd5CheckState::InProgress => RustIsoMd5Check { status: 1, result: 0 },
+            IsoMd5CheckState::Complete(result) => RustIsoMd5Check {
+                status: 2,
+                result: match result {
+                    IsoMd5CheckResult::SafeIso { .. } => 1,
+                    IsoMd5CheckResult::KnownDesyncIso { .. } => 2,
+                    IsoMd5CheckResult::Failed => 3,
+                },
+            },
+        }
+    })
 }
 
 /// Configures the Jukebox process. This needs to be called after the EXI device is created

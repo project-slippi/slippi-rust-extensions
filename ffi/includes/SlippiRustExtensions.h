@@ -46,6 +46,20 @@ typedef struct SlippiRustEXIConfig {
 } SlippiRustEXIConfig;
 
 /**
+ * ISO MD5 status and final outcome that we vend back over FFI.
+ */
+typedef struct RustIsoMd5Check {
+  /**
+   * 0 = NotStarted, 1 = InProgress, 2 = Complete
+   */
+  int status;
+  /**
+   * 0 = Unknown, 1 = SafeIso, 2 = KnownDesyncIso, 3 = Failed
+   */
+  int result;
+} RustIsoMd5Check;
+
+/**
  * Rank info that we vend back to the Dolphin side of things.
  */
 typedef struct RustRankInfo {
@@ -152,6 +166,11 @@ void slprs_exi_device_report_match_status(uintptr_t instance_ptr,
 void slprs_exi_device_reporter_push_replay_data(uintptr_t instance_ptr,
                                                 const uint8_t *data,
                                                 uint32_t length);
+
+/**
+ * Gets the status and result of the background ISO MD5 check.
+ */
+struct RustIsoMd5Check slprs_get_iso_md5_check(uintptr_t exi_device_instance_ptr);
 
 /**
  * Configures the Jukebox process. This needs to be called after the EXI device is created
