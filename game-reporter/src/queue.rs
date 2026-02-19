@@ -14,6 +14,7 @@ use serde_json::json;
 use dolphin_integrations::{Color, Dolphin, Duration as OSDDuration, Log};
 use slippi_gg_api::{APIClient, GraphQLError};
 
+use crate::IsoMd5CheckState;
 use crate::types::{GameReport, GameReportRequestPayload, OnlinePlayMode};
 use crate::{ProcessingEvent, StatusReportEvent};
 
@@ -38,7 +39,7 @@ struct ReportResponse {
 #[derive(Clone, Debug)]
 pub struct GameReporterQueue {
     pub api_client: APIClient,
-    pub iso_hash: Arc<Mutex<String>>,
+    pub iso_md5_check_state: Arc<Mutex<IsoMd5CheckState>>,
     inner: Arc<Mutex<VecDeque<GameReport>>>,
 }
 
@@ -47,7 +48,7 @@ impl GameReporterQueue {
     pub(crate) fn new(api_client: APIClient) -> Self {
         Self {
             api_client,
-            iso_hash: Arc::new(Mutex::new(String::new())),
+            iso_md5_check_state: Arc::new(Mutex::new(IsoMd5CheckState::default())),
             inner: Arc::new(Mutex::new(VecDeque::new())),
         }
     }
@@ -172,9 +173,16 @@ pub(crate) fn run(reporter: GameReporterQueue, receiver: Receiver<ProcessingEven
 
 /// Process jobs from the queue.
 fn process_reports(queue: &GameReporterQueue, event: ProcessingEvent) {
-    let Ok(iso_hash) = queue.iso_hash.lock() else {
-        tracing::warn!(target: Log::SlippiOnline, "No ISO_HASH available");
-        return;
+    let iso_hash = match queue.iso_md5_check_state.lock() {
+        Ok(iso_md5_check_state) => iso_md5_check_state.iso_hash().unwrap_or_default().to_string(),
+        Err(error) => {
+            tracing::warn!(
+                target: Log::SlippiOnline,
+                ?error,
+                "Unable to lock iso_md5_check_state while processing reports"
+            );
+            String::new()
+        },
     };
 
     let Ok(mut report_queue) = queue.inner.lock() else {

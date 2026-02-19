@@ -12,6 +12,7 @@ use slippi_gg_api::APIClient;
 use slippi_user::UserManager;
 
 mod iso_md5_hasher;
+pub use iso_md5_hasher::{IsoMd5CheckResult, IsoMd5CheckState};
 
 mod queue;
 use queue::GameReporterQueue;
@@ -72,12 +73,12 @@ impl GameReporter {
 
         // This is a thread-safe "one time" setter that the MD5 hasher thread
         // will set when it's done computing.
-        let iso_hash_setter = queue.iso_hash.clone();
+        let iso_md5_check_state_setter = queue.iso_md5_check_state.clone();
 
         let iso_md5_hasher_thread = thread::Builder::new()
             .name("GameReporterISOHasherThread".into())
             .spawn(move || {
-                iso_md5_hasher::run(iso_hash_setter, iso_path);
+                iso_md5_hasher::run(iso_md5_check_state_setter, iso_path);
             })
             .expect("Failed to spawn GameReporterISOHasherThread.");
 
@@ -177,6 +178,21 @@ impl GameReporter {
                 error = ?e,
                 "Unable to dispatch match status report notification"
             );
+        }
+    }
+
+    /// Returns the current lifecycle status and result of the ISO MD5 check.
+    pub fn iso_md5_check_state(&self) -> IsoMd5CheckState {
+        match self.queue.iso_md5_check_state.lock() {
+            Ok(iso_md5_check_state) => iso_md5_check_state.clone(),
+            Err(error) => {
+                tracing::error!(
+                    target: Log::SlippiOnline,
+                    ?error,
+                    "Unable to lock iso_md5_check_state"
+                );
+                IsoMd5CheckState::Complete(IsoMd5CheckResult::Failed)
+            },
         }
     }
 }
