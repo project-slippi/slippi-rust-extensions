@@ -2,15 +2,12 @@
 //! be called from a background thread due to processing time.
 
 use std::fs::File;
-use std::path::PathBuf;
+use std::io::{BufRead, BufReader, IsTerminal};
 use std::sync::{Arc, Mutex};
 
-use chksum::chksum;
-use chksum::hash::MD5;
+use chksum::{chksum, Chksumable, Hash, Hashable, MD5};
 
 use dolphin_integrations::{Color, Dolphin, Duration, Log};
-
-use crate::iso_md5_cache;
 
 /// Result of an ISO MD5 check after hashing completes.
 #[derive(Clone, Debug)]
@@ -64,6 +61,40 @@ const KNOWN_DESYNC_ISOS: [&str; 10] = [
     "d19d367683fd9f94453bf4e588d26d7d", // Diet Melee 64 v1.0.3
 ];
 
+/// A BufReader wrapper that initializes with a larger 8MB buffer read size.
+///
+/// The C++ code that this was ported from read 8MB chunks at a time. When we pass a `std::io::File`
+/// in to `chksum`, it's using the default buffer size - 8kb - which is immensely slower unless we
+/// work around it.
+#[derive(Debug)]
+struct IsoBufReader(File);
+
+impl Chksumable for IsoBufReader {
+    /// Reads and hashes the underlying value, reading in 8MB chunks.
+    fn chksum_with<H>(&mut self, hash: &mut H) -> Result<(), chksum::Error>
+    where
+        H: Hash,
+    {
+        if self.0.is_terminal() {
+            return Err(chksum::Error::IsTerminal);
+        }
+
+        let capacity = 8 * 1024 * 1024;
+        let mut reader = BufReader::with_capacity(capacity, &self.0);
+        loop {
+            let buffer = reader.fill_buf()?;
+            let length = buffer.len();
+            if length == 0 {
+                break;
+            }
+            buffer.hash_with(hash);
+            reader.consume(length);
+        }
+
+        Ok(())
+    }
+}
+
 /// Computes (or recalls) an MD5 hash of the ISO at `iso_path` and writes the
 /// result to `iso_md5_check_state`. Results are persisted to a small cache
 /// file under `user_config_folder` so subsequent runs against the same ISO
@@ -73,19 +104,11 @@ const KNOWN_DESYNC_ISOS: [&str; 10] = [
 /// we move things into Rust I'd like to reduce the chances of anything panic'ing back
 /// into C++ since that can produce undefined behavior. This just handles every possible
 /// failure gracefully - however seemingly rare - and simply logs the error.
-pub fn run(iso_md5_check_state: Arc<Mutex<IsoMd5CheckState>>, iso_path: String, user_config_folder: PathBuf) {
+pub fn run(iso_md5_check_state: Arc<Mutex<IsoMd5CheckState>>, iso_path: String) {
     set_iso_md5_check_state(&iso_md5_check_state, IsoMd5CheckState::InProgress);
 
-    let cache_path = iso_md5_cache::path_in(&user_config_folder);
-
-    if let Some(hash) = iso_md5_cache::lookup(&cache_path, &iso_path) {
-        tracing::info!(target: Log::SlippiOnline, iso_md5_hash = ?hash, "Loaded ISO MD5 hash from cache");
-        finish_with_hash(&iso_md5_check_state, hash);
-        return;
-    }
-
     let digest = match File::open(&iso_path) {
-        Ok(file) => match chksum::<MD5, _>(file) {
+        Ok(file) => match chksum::<MD5>(IsoBufReader(file)) {
             Ok(digest) => digest,
 
             Err(error) => {
@@ -105,8 +128,6 @@ pub fn run(iso_md5_check_state: Arc<Mutex<IsoMd5CheckState>>, iso_path: String, 
     };
 
     let hash = format!("{:x}", digest);
-
-    iso_md5_cache::store(&cache_path, &iso_path, &hash);
 
     finish_with_hash(&iso_md5_check_state, hash);
 }

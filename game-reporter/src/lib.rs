@@ -2,7 +2,6 @@
 //! not to rewrite the universe.
 
 use std::ops::Deref;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::mpsc::{self, Sender};
@@ -12,7 +11,6 @@ use dolphin_integrations::Log;
 use slippi_gg_api::APIClient;
 use slippi_user::UserManager;
 
-mod iso_md5_cache;
 mod iso_md5_hasher;
 pub use iso_md5_hasher::{IsoMd5CheckResult, IsoMd5CheckState};
 
@@ -74,7 +72,6 @@ impl GameReporter {
         api_client: APIClient,
         user_manager: UserManager,
         iso_path: String,
-        user_config_folder: PathBuf,
     ) -> Self {
         let queue = GameReporterQueue::new(api_client.clone());
 
@@ -85,7 +82,7 @@ impl GameReporter {
         let iso_md5_hasher_thread = thread::Builder::new()
             .name("GameReporterISOHasherThread".into())
             .spawn(move || {
-                iso_md5_hasher::run(iso_md5_check_state_setter, iso_path, user_config_folder);
+                iso_md5_hasher::run(iso_md5_check_state_setter, iso_path);
             })
             .expect("Failed to spawn GameReporterISOHasherThread.");
 
