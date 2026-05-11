@@ -46,7 +46,12 @@ impl SlippiEXIDevice {
             config.scm.slippi_semver.clone(),
         );
 
-        let game_reporter = GameReporter::new(api_client.clone(), user_manager.clone(), config.paths.iso.clone());
+        let game_reporter = GameReporter::new(
+            api_client.clone(),
+            user_manager.clone(),
+            config.paths.iso.clone(),
+            config.paths.user_config_folder.clone().into(),
+        );
 
         // Playback has no need to deal with this.
         // (We could maybe silo more?)

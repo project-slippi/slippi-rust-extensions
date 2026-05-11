@@ -2,12 +2,15 @@
 //! be called from a background thread due to processing time.
 
 use std::fs::File;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use chksum::chksum;
 use chksum::hash::MD5;
 
 use dolphin_integrations::{Color, Dolphin, Duration, Log};
+
+use crate::iso_md5_cache;
 
 /// Result of an ISO MD5 check after hashing completes.
 #[derive(Clone, Debug)]
@@ -61,15 +64,25 @@ const KNOWN_DESYNC_ISOS: [&str; 10] = [
     "d19d367683fd9f94453bf4e588d26d7d", // Diet Melee 64 v1.0.3
 ];
 
-/// Computes an MD5 hash of the ISO at `iso_path` and writes the result to
-/// `iso_md5_check_state`.
+/// Computes (or recalls) an MD5 hash of the ISO at `iso_path` and writes the
+/// result to `iso_md5_check_state`. Results are persisted to a small cache
+/// file under `user_config_folder` so subsequent runs against the same ISO
+/// can skip the (potentially slow) hashing step.
 ///
 /// This function is currently more defensive than it probably needs to be, but while
 /// we move things into Rust I'd like to reduce the chances of anything panic'ing back
 /// into C++ since that can produce undefined behavior. This just handles every possible
 /// failure gracefully - however seemingly rare - and simply logs the error.
-pub fn run(iso_md5_check_state: Arc<Mutex<IsoMd5CheckState>>, iso_path: String) {
+pub fn run(iso_md5_check_state: Arc<Mutex<IsoMd5CheckState>>, iso_path: String, user_config_folder: PathBuf) {
     set_iso_md5_check_state(&iso_md5_check_state, IsoMd5CheckState::InProgress);
+
+    let cache_path = iso_md5_cache::path_in(&user_config_folder);
+
+    if let Some(hash) = iso_md5_cache::lookup(&cache_path, &iso_path) {
+        tracing::info!(target: Log::SlippiOnline, iso_md5_hash = ?hash, "Loaded ISO MD5 hash from cache");
+        finish_with_hash(&iso_md5_check_state, hash);
+        return;
+    }
 
     let digest = match File::open(&iso_path) {
         Ok(file) => match chksum::<MD5, _>(file) {
@@ -93,11 +106,20 @@ pub fn run(iso_md5_check_state: Arc<Mutex<IsoMd5CheckState>>, iso_path: String) 
 
     let hash = format!("{:x}", digest);
 
+    iso_md5_cache::store(&cache_path, &iso_path, &hash);
+
+    finish_with_hash(&iso_md5_check_state, hash);
+}
+
+/// Classifies the hash (safe vs. known desync), logs it, surfaces the OSD
+/// warning if needed, and publishes the final state. Shared by both the
+/// cache-hit and fresh-hash paths so they behave identically.
+fn finish_with_hash(iso_md5_check_state: &Mutex<IsoMd5CheckState>, hash: String) {
     if !KNOWN_DESYNC_ISOS.contains(&hash.as_str()) {
         tracing::info!(target: Log::SlippiOnline, iso_md5_hash = ?hash);
 
         set_iso_md5_check_state(
-            &iso_md5_check_state,
+            iso_md5_check_state,
             IsoMd5CheckState::Complete(IsoMd5CheckResult::SafeIso { hash }),
         );
 
@@ -123,7 +145,7 @@ pub fn run(iso_md5_check_state: Arc<Mutex<IsoMd5CheckState>>, iso_path: String) 
     );
 
     set_iso_md5_check_state(
-        &iso_md5_check_state,
+        iso_md5_check_state,
         IsoMd5CheckState::Complete(IsoMd5CheckResult::KnownDesyncIso { hash }),
     );
 }

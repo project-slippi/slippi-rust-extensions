@@ -2,6 +2,7 @@
 //! not to rewrite the universe.
 
 use std::ops::Deref;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::mpsc::{self, Sender};
@@ -11,6 +12,7 @@ use dolphin_integrations::Log;
 use slippi_gg_api::APIClient;
 use slippi_user::UserManager;
 
+mod iso_md5_cache;
 mod iso_md5_hasher;
 pub use iso_md5_hasher::{IsoMd5CheckResult, IsoMd5CheckState};
 
@@ -68,7 +70,12 @@ impl GameReporter {
     ///
     /// Currently, failure to spawn any thread should result in a crash - i.e, if we can't
     /// spawn an OS thread, then there are probably far bigger issues at work here.
-    pub fn new(api_client: APIClient, user_manager: UserManager, iso_path: String) -> Self {
+    pub fn new(
+        api_client: APIClient,
+        user_manager: UserManager,
+        iso_path: String,
+        user_config_folder: PathBuf,
+    ) -> Self {
         let queue = GameReporterQueue::new(api_client.clone());
 
         // This is a thread-safe "one time" setter that the MD5 hasher thread
@@ -78,7 +85,7 @@ impl GameReporter {
         let iso_md5_hasher_thread = thread::Builder::new()
             .name("GameReporterISOHasherThread".into())
             .spawn(move || {
-                iso_md5_hasher::run(iso_md5_check_state_setter, iso_path);
+                iso_md5_hasher::run(iso_md5_check_state_setter, iso_path, user_config_folder);
             })
             .expect("Failed to spawn GameReporterISOHasherThread.");
 
