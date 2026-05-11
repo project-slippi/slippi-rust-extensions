@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, IsTerminal};
 use std::sync::{Arc, Mutex};
 
-use chksum::{chksum, Chksumable, Hash, Hashable, MD5};
+use chksum::{Chksumable, Hash, Hashable, MD5, chksum};
 
 use dolphin_integrations::{Color, Dolphin, Duration, Log};
 

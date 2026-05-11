@@ -68,11 +68,7 @@ impl GameReporter {
     ///
     /// Currently, failure to spawn any thread should result in a crash - i.e, if we can't
     /// spawn an OS thread, then there are probably far bigger issues at work here.
-    pub fn new(
-        api_client: APIClient,
-        user_manager: UserManager,
-        iso_path: String,
-    ) -> Self {
+    pub fn new(api_client: APIClient, user_manager: UserManager, iso_path: String) -> Self {
         let queue = GameReporterQueue::new(api_client.clone());
 
         // This is a thread-safe "one time" setter that the MD5 hasher thread
