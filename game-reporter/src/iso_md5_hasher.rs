@@ -2,11 +2,11 @@
 //! be called from a background thread due to processing time.
 
 use std::fs::File;
+use std::io::{BufRead, BufReader, IsTerminal};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use chksum::chksum;
-use chksum::hash::MD5;
+use chksum::{Hash, Hashable, MD5};
 
 use dolphin_integrations::{Color, Dolphin, Duration, Log};
 
@@ -64,6 +64,40 @@ const KNOWN_DESYNC_ISOS: [&str; 10] = [
     "d19d367683fd9f94453bf4e588d26d7d", // Diet Melee 64 v1.0.3
 ];
 
+/// Builds an MD5 hash of the provided file.
+///
+/// This does the legwork of reading the file as we want to read in
+/// larger chunks (8MB) than the standard library `BufReader` allows (8kb). This
+/// mirrors what the original Dolphin C++ code does and avoids bottlenecks when the
+/// user has an ISO on a slow drive.
+///
+/// Subsequent caching of this result means this is a first-pass optimization, but
+/// it doesn't hurt to do it anyway.
+fn gen_chksum<H>(file: File) -> Result<H::Digest, chksum::Error>
+where
+    H: Hash,
+{
+    if file.is_terminal() {
+        return Err(chksum::Error::IsTerminal);
+    }
+
+    let mut hash = H::default();
+
+    let capacity = 8 * 1024 * 1024;
+    let mut reader = BufReader::with_capacity(capacity, file);
+    loop {
+        let buffer = reader.fill_buf()?;
+        let length = buffer.len();
+        if length == 0 {
+            break;
+        }
+        buffer.hash_with(&mut hash);
+        reader.consume(length);
+    }
+
+    Ok(hash.digest())
+}
+
 /// Computes (or recalls) an MD5 hash of the ISO at `iso_path` and writes the
 /// result to `iso_md5_check_state`. Results are persisted to a small cache
 /// file under `user_config_folder` so subsequent runs against the same ISO
@@ -85,7 +119,7 @@ pub fn run(iso_md5_check_state: Arc<Mutex<IsoMd5CheckState>>, iso_path: String, 
     }
 
     let digest = match File::open(&iso_path) {
-        Ok(file) => match chksum::<MD5, _>(file) {
+        Ok(file) => match gen_chksum::<MD5>(file) {
             Ok(digest) => digest,
 
             Err(error) => {

@@ -13,7 +13,7 @@ mainline = []
 playback = []
 
 [dependencies]
-chksum = { version = "0.2.2", default-features = false, features = ["md5"] }
+chksum = { version = "0.4.0", default-features = false, features = ["md5"] }
 dolphin-integrations = { path = "../dolphin" }
 flate2 = "1.0"
 serde = { workspace = true }

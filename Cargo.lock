@@ -90,12 +90,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "anyhow"
-version = "1.0.98"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
-
-[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -202,23 +196,59 @@ checksum = "9555578bc9e57714c812a1f84e4fc5b4d21fcb063490c624de019f7464c91268"
 
 [[package]]
 name = "chksum"
-version = "0.2.2"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00e5d666d3b2f7b68fb54c8a492b4aea757ce147b2815358a5b6c45e6a9f24d6"
+checksum = "6401faa70a7381c411e1d44c34cc9ea7c4dc1e12e9f86daf55e4941d10612f13"
 dependencies = [
+ "chksum-core",
  "chksum-hash",
- "is-terminal",
+ "chksum-md5",
+]
+
+[[package]]
+name = "chksum-core"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0475dc9fa905fe8feca5c4a48a97f65503ebd257a7566df1367d080083e160c6"
+dependencies = [
+ "chksum-hash-core",
  "thiserror",
 ]
 
 [[package]]
 name = "chksum-hash"
-version = "0.4.3"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6883bbf1ecf4736e5af31acd07b133d6595d2c431eda4106c8cf38f444a2208c"
+checksum = "862a3491c65e277e0cc86f373c276dd8680b8a3a58460c44b22eded5e13cf1ba"
 dependencies = [
- "anyhow",
+ "chksum-hash-core",
+ "chksum-hash-md5",
+]
+
+[[package]]
+name = "chksum-hash-core"
+version = "0.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "221456234d441c788a2c51a27b91c4380f499de560670a67d3303e621d37b3bd"
+
+[[package]]
+name = "chksum-hash-md5"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8445e9efb2556cedf4ef2bf704cb335cdd037ed20fe954f281baf93fe5e7c0d"
+dependencies = [
+ "chksum-hash-core",
  "thiserror",
+]
+
+[[package]]
+name = "chksum-md5"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dda0016624d188e791afdf491de89d0157411dafedb0a46dbcd3f1a13ef0a611"
+dependencies = [
+ "chksum-core",
+ "chksum-hash-md5",
 ]
 
 [[package]]
@@ -483,12 +513,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
-name = "hermit-abi"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc0fef456e4baa96da950455cd02c081ca953b141298e41db3fc7e36b1da849c"
-
-[[package]]
 name = "hps_decode"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -624,17 +648,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "928bae27f42bc99b60d9ac7334e3a21d10ad8f1835a4e12ec3ec0464765ed1b3"
 dependencies = [
  "once_cell",
-]
-
-[[package]]
-name = "is-terminal"
-version = "0.4.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e04d7f318608d35d4b61ddd75cbdaee86b023ebe2bd5a66ee0915f0bf93095a9"
-dependencies = [
- "hermit-abi",
- "libc",
- "windows-sys 0.59.0",
 ]
 
 [[package]]
