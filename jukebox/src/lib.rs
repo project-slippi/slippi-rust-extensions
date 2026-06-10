@@ -92,8 +92,8 @@ impl Jukebox {
         initial_dolphin_system_volume: u8,
         initial_dolphin_music_volume: u8,
     ) -> Result<()> {
-        let stream_handle = OutputStreamBuilder::open_default_stream()?;
-        let sink = Sink::connect_new(&stream_handle.mixer());
+        // No longer created up front — built per-song instead
+        let mut active_playback: Option<(rodio::OutputStream, Sink)> = None;
 
         let mut iso = File::open(&iso_path)?;
         let get_real_offset = disc::create_offset_locator_fn(&mut iso)?;
@@ -102,13 +102,17 @@ impl Jukebox {
         let mut dolphin_system_volume = (initial_dolphin_system_volume as f32 / 100.0).clamp(0.0, 1.0);
         let mut dolphin_music_volume = (initial_dolphin_music_volume as f32 / 100.0).clamp(0.0, 1.0);
 
-        sink.set_volume(melee_music_volume * dolphin_system_volume * dolphin_music_volume * VOLUME_REDUCTION_MULTIPLIER);
-
         loop {
             match rx.recv()? {
                 StartSong(hps_offset, hps_length) => {
-                    // Stop the currently playing song
-                    sink.stop();
+                    // Drop old sink + stream, then open a fresh stream on whatever
+                    // device is currently the OS default
+                    active_playback = None;
+                    let stream_handle = OutputStreamBuilder::open_default_stream()?;
+                    let sink = Sink::connect_new(&stream_handle.mixer());
+                    sink.set_volume(
+                        melee_music_volume * dolphin_system_volume * dolphin_music_volume * VOLUME_REDUCTION_MULTIPLIER,
+                    );
 
                     // Get the _real_ offset of the hps file on the iso
                     let real_hps_offset = match get_real_offset(hps_offset) {
@@ -148,21 +152,24 @@ impl Jukebox {
                     // Play the song
                     sink.append(source);
                     sink.play();
+                    active_playback = Some((stream_handle, sink));
                 },
                 SetVolume(control, volume) => {
                     use VolumeControl::*;
-
                     match control {
                         Melee => melee_music_volume = (volume as f32 / 254.0).clamp(0.0, 1.0),
                         DolphinSystem => dolphin_system_volume = (volume as f32 / 100.0).clamp(0.0, 1.0),
                         DolphinMusic => dolphin_music_volume = (volume as f32 / 100.0).clamp(0.0, 1.0),
                     };
-
-                    sink.set_volume(
-                        melee_music_volume * dolphin_system_volume * dolphin_music_volume * VOLUME_REDUCTION_MULTIPLIER,
-                    );
+                    if let Some((_, sink)) = &active_playback {
+                        sink.set_volume(
+                            melee_music_volume * dolphin_system_volume * dolphin_music_volume * VOLUME_REDUCTION_MULTIPLIER,
+                        );
+                    }
                 },
-                StopMusic => sink.stop(),
+                StopMusic => {
+                    active_playback = None; // drops sink + stream, stops playback
+                },
                 JukeboxDropped => return Ok(()),
             }
         }
