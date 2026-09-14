@@ -1,0 +1,26 @@
+[package]
+name = "slippi-discord-rpc"
+description = "Mirrors live Slippi game state (stage, characters, stocks, set score) to a locally running Discord client as Rich Presence."
+version = "0.1.0"
+authors = [
+    "Slippi Team",
+    "Anders Madsen <madsenanders97@gmail.com>"
+]
+edition = "2024"
+publish = false
+
+[features]
+default = []
+ishiiruka = []
+mainline = []
+playback = []
+
+[dependencies]
+discord-rich-presence = "1.1.0"
+dolphin-integrations = { path = "../dolphin" }
+slippi-user = { path = "../user" }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tracing-subscriber = "0.3"

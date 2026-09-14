@@ -208,7 +208,7 @@ pub extern "C" fn slprs_exi_device_reporter_push_replay_data(instance_ptr: usize
     // by us, and are created/destroyed with the corresponding lifetimes.
     let mut device = unsafe { Box::from_raw(instance_ptr as *mut SlippiEXIDevice) };
 
-    device.game_reporter.push_replay_data(slice);
+    device.push_replay_data(slice);
 
     // Fall back into a raw pointer so Rust doesn't obliterate the object.
     let _leak = Box::into_raw(device);

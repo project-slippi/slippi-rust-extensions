@@ -23,6 +23,7 @@ playback = [
 
 [dependencies]
 dolphin-integrations = { path = "../dolphin" }
+slippi-discord-rpc = { path = "../discord-rpc" }
 slippi-game-reporter = { path = "../game-reporter" }
 slippi-gg-api = { path = "../slippi-gg-api" }
 slippi-jukebox = { path = "../jukebox" }

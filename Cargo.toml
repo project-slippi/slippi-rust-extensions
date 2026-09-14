@@ -5,6 +5,7 @@ resolver = "2"
 default-members = ["ffi"]
 
 members = [
+    "discord-rpc",
     "dolphin",
     "exi",
     "ffi",

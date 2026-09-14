@@ -14,6 +14,7 @@ This workspace currently targets Rust `1.88.0`. As long as you have Rust install
 
 | Module                 | Description                                                                |
 |------------------------|----------------------------------------------------------------------------|
+| `discord-rpc`          | Discord Rich Presence. See the [Slippi Discord RPC README](discord-rpc/README.md) for more info. |
 | `dolphin`              | A library that wraps Dolphin callbacks (logging, etc).                     |
 | `exi`                  | EXI device that receives forwarded calls from the EXI (C++) device.        |
 | `ffi`                  | The core library. Exposes C FFI functions for Dolphin to call.             |

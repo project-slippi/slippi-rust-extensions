@@ -9,6 +9,7 @@ use std::ffi::{CStr, c_char};
 
 use dolphin_integrations::Log;
 
+pub mod discord_rpc;
 pub mod exi;
 pub mod game_reporter;
 pub mod jukebox;
