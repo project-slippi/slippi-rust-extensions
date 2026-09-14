@@ -9,6 +9,7 @@ use dolphin_integrations::Log;
 use slippi_game_reporter::GameReporter;
 use slippi_gg_api::APIClient;
 use slippi_jukebox::Jukebox;
+use slippi_matchmaking::MatchmakingClient;
 use slippi_user::UserManager;
 
 mod config;
@@ -20,6 +21,7 @@ pub struct SlippiEXIDevice {
     config: Config,
     pub game_reporter: GameReporter,
     pub user_manager: UserManager,
+    pub matchmaking: MatchmakingClient,
     pub jukebox: Option<Jukebox>,
 }
 
@@ -58,10 +60,13 @@ impl SlippiEXIDevice {
         #[cfg(not(feature = "playback"))]
         user_manager.watch_for_login();
 
+        let matchmaking = MatchmakingClient::new(user_manager.clone(), config.scm.slippi_semver.clone());
+
         Self {
             config,
             game_reporter,
             user_manager,
+            matchmaking,
             jukebox: None,
         }
     }
