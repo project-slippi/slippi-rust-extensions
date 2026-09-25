@@ -36,7 +36,9 @@ pub struct SlippiResolvedGameFile {
 /// file's bytes and return true, or return false if the file does not exist. The bytes only need
 /// to stay valid until the callback is invoked again or `slprs_gamefile_resolve` returns; Rust
 /// copies them.
-pub type SlippiReadDiscFileFn = Option<unsafe extern "C" fn(ctx: *mut c_void, file_name: *const c_char, out_data: *mut *const u8, out_len: *mut usize) -> bool>;
+pub type SlippiReadDiscFileFn = Option<
+    unsafe extern "C" fn(ctx: *mut c_void, file_name: *const c_char, out_data: *mut *const u8, out_len: *mut usize) -> bool,
+>;
 
 fn no_links() -> SlippiResolvedGameFile {
     SlippiResolvedGameFile {
@@ -85,7 +87,12 @@ pub extern "C" fn slprs_gamefile_resolve(
             return no_links();
         },
     };
-    let links: Vec<&str> = archive.refs.iter().map(|r| r.name.as_str()).filter(|n| Locator::is_link(n)).collect();
+    let links: Vec<&str> = archive
+        .refs
+        .iter()
+        .map(|r| r.name.as_str())
+        .filter(|n| Locator::is_link(n))
+        .collect();
     if links.is_empty() {
         return no_links();
     }
