@@ -8,6 +8,21 @@
 #include <stdlib.h>
 
 /**
+ * The file was resolved. `data` holds the result and must be freed with `slprs_gamefile_free`.
+ */
+#define SLPRS_GAMEFILE_RESOLVED 0
+
+/**
+ * The file has no links, or is not an archive. Use it as it was passed in. `data` is null.
+ */
+#define SLPRS_GAMEFILE_NO_LINKS 1
+
+/**
+ * A link could not be resolved; the reason was logged. `data` is null.
+ */
+#define SLPRS_GAMEFILE_FAILED 2
+
+/**
  * Size in bytes of the buffer `slprs_stun_build_request` fills.
  */
 #define SLPRS_STUN_REQUEST_LEN 20
@@ -63,6 +78,26 @@ typedef struct RustIsoMd5Check {
    */
   int result;
 } RustIsoMd5Check;
+
+/**
+ * Result of `slprs_gamefile_resolve`.
+ */
+typedef struct SlippiResolvedGameFile {
+  uint8_t *data;
+  uintptr_t len;
+  int32_t status;
+} SlippiResolvedGameFile;
+
+/**
+ * Reads a file from the running disc. Given a file name, point `out_data` and `out_len` at the
+ * file's bytes and return true, or return false if the file does not exist. The bytes only need
+ * to stay valid until the callback is invoked again or `slprs_gamefile_resolve` returns; Rust
+ * copies them.
+ */
+typedef bool (*SlippiReadDiscFileFn)(void *ctx,
+                                     const char *file_name,
+                                     const uint8_t **out_data,
+                                     uintptr_t *out_len);
 
 /**
  * What one STUN server reported for the netplay socket. Filled in by
@@ -277,6 +312,21 @@ uintptr_t slprs_game_report_create(const char *uid,
  */
 void slprs_game_report_add_player_report(uintptr_t instance_ptr,
                                          uintptr_t player_report_instance_ptr);
+
+/**
+ * Resolves the `slp:` links in the archive at `data` using `read_disc_fn` to fetch disc files.
+ * `file_name` is only used for logging. `ctx` is passed through to the callback untouched.
+ */
+struct SlippiResolvedGameFile slprs_gamefile_resolve(const char *file_name,
+                                                     const uint8_t *data,
+                                                     uintptr_t len,
+                                                     void *ctx,
+                                                     SlippiReadDiscFileFn read_disc_fn);
+
+/**
+ * Releases a buffer returned by `slprs_gamefile_resolve`. Safe to call with a null `data`.
+ */
+void slprs_gamefile_free(struct SlippiResolvedGameFile result);
 
 /**
  * Calls through to `Jukebox::start_song`.

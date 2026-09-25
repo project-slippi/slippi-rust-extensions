@@ -1344,6 +1344,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "slippi-hsd"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "sha1",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "slippi-jukebox"
 version = "0.1.0"
 dependencies = [
@@ -1391,6 +1400,7 @@ dependencies = [
  "dolphin-integrations",
  "slippi-exi-device",
  "slippi-game-reporter",
+ "slippi-hsd",
  "slippi-jukebox",
  "slippi-matchmaking",
  "slippi-user",
