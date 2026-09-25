@@ -49,8 +49,8 @@ fn two_clients_get_matched() {
         return;
     };
 
-    let mut a = client("a", "test-a", "AAA#1", &url);
-    let mut b = client("b", "test-b", "BBB#1", &url);
+    let a = client("a", "test-a", "AAA#1", &url);
+    let b = client("b", "test-b", "BBB#1", &url);
 
     let request = |port: u16, lat: f64, lon: f64| {
         // Both servers saw the same mapping, so this looks like a cone NAT
@@ -116,7 +116,7 @@ fn cancel_leaves_queue() {
         return;
     };
 
-    let mut c = client("c", "test-c", "CCC#1", &url);
+    let c = client("c", "test-c", "CCC#1", &url);
     c.start(MatchRequest {
         mode: 1,
         netplay_port: 41020,
