@@ -6,13 +6,20 @@
 //! exists in a disc file becomes one link and is not descended into, otherwise its children are
 //! examined in turn. That way a copied joint set becomes a single link, while a Slippi-built tree
 //! that merely contains vanilla textures gets one link per texture.
+//!
+//! What a match is decides whether it is linked, not its size. A match is linked when it holds
+//! something visual (see [`Type::is_visual`]), so a light or a material comes from the disc however
+//! small it is. A match of nothing but structure, such as a display list or render settings, stays
+//! in the file, as does a common value that occurs in many disc files, such as a default material:
+//! neither is worth a dependency on the disc.
 
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 
 use crate::Result;
 use crate::archive::Archive;
 use crate::hash::Hasher;
 use crate::link::{link, locate};
+use crate::schema::{self, Type};
 
 /// Where a hash was seen in the disc archives.
 #[derive(Clone, Copy, Debug)]
@@ -58,9 +65,12 @@ impl SourceIndex {
 
 #[derive(Clone, Debug, Default)]
 pub struct Options {
-    /// Smallest subtree, in trimmed bytes, worth linking. Below this, matches are likely
-    /// coincidental and each link is a runtime dependency for nothing.
+    /// Smallest struct of unknown type, in trimmed bytes, that counts as visual. Structs the type
+    /// walk cannot name have only their size to go by; below this a match is likely coincidental.
     pub min_bytes: usize,
+    /// A match found in more distinct disc files than this is a common value, such as a default
+    /// material or an identity matrix, rather than an asset, and is not linked.
+    pub common_files: usize,
     /// Disc files to use in preference to others when an asset exists in several.
     pub prefer: Vec<String>,
     /// If not empty, the only disc files links may point into. Small structs match bytes in
@@ -75,6 +85,7 @@ impl Options {
     pub fn defaults() -> Self {
         Options {
             min_bytes: 64,
+            common_files: 16,
             prefer: Vec::new(),
             only: Vec::new(),
             report_unmatched_from: 256,
@@ -87,6 +98,8 @@ pub struct LinkEntry {
     pub symbol: String,
     /// Where the asset sat in the target, as a path from its root.
     pub target: String,
+    /// Type of the linked struct, or "?" when the type walk could not name it.
+    pub kind: &'static str,
     pub extents: usize,
     pub bytes: usize,
 }
@@ -95,6 +108,18 @@ pub struct LinkEntry {
 pub struct Unmatched {
     pub target: String,
     pub bytes: usize,
+}
+
+/// A match with the disc that was not linked.
+#[derive(Clone, Debug)]
+pub struct Kept {
+    pub target: String,
+    pub kind: &'static str,
+    pub bytes: usize,
+    /// Distinct disc files the match occurs in.
+    pub files: usize,
+    /// Nothing visual in it, as opposed to a common value.
+    pub structural: bool,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -108,6 +133,8 @@ pub struct Report {
     pub bytes_total: usize,
     /// Pointer-free buffers that matched no disc archive, largest first.
     pub unmatched: Vec<Unmatched>,
+    /// Matches left in the file because they are only structure or a common value.
+    pub kept: Vec<Kept>,
 }
 
 fn trimmed_len(data: &[u8]) -> usize {
@@ -148,6 +175,9 @@ pub fn autolink(
     options: &Options,
 ) -> Result<(Archive, Report)> {
     // Plan: walk from the roots, largest matching subtree first.
+    let types = schema::types(target);
+    let kind = |extent: usize| types[extent].map_or("?", Type::name);
+    let mut kept = Vec::new();
     let mut hasher = Hasher::new(target);
     let mut visited = vec![false; target.extents.len()];
     let mut is_root = vec![false; target.extents.len()];
@@ -161,6 +191,7 @@ pub fn autolink(
     }
     struct Planned {
         origin: u32,
+        kind: &'static str,
         candidates: Vec<Candidate>,
         extents: usize,
         bytes: usize,
@@ -186,7 +217,22 @@ pub fn autolink(
         if !is_root[idx] {
             if let Some(cands) = index.by_hash.get(&hasher.extent(idx)) {
                 let (extents, bytes) = subtree_bytes(target, idx);
-                if bytes >= options.min_bytes && is_owned(target, &root_extents, idx) {
+                let files = cands.iter().map(|c| c.file).collect::<BTreeSet<_>>().len();
+                let visual = target
+                    .reachable(&[idx], |_, _| false)
+                    .into_iter()
+                    .any(|i| schema::is_visual(target, &types, i, options.min_bytes));
+                if !visual || files > options.common_files {
+                    // Nothing below can qualify: it is no more visual and at least as common.
+                    kept.push(Kept {
+                        target: target_path(target, idx),
+                        kind: kind(idx),
+                        bytes,
+                        files,
+                        structural: !visual,
+                    });
+                    descend = false;
+                } else if is_owned(target, &root_extents, idx) {
                     // The structural hash cannot tell one shared struct from two identical
                     // copies, so a candidate must also have the same number of structs, or
                     // resolving it would add (or merge) structs.
@@ -205,6 +251,7 @@ pub fn autolink(
                     } else {
                         plan.push(Planned {
                             origin: target.extents[idx].origin,
+                            kind: kind(idx),
                             candidates: same_shape,
                             extents,
                             bytes,
@@ -307,6 +354,7 @@ pub fn autolink(
         report.links.push(LinkEntry {
             symbol,
             target: path,
+            kind: entry.kind,
             extents: entry.extents,
             bytes: entry.bytes,
         });
@@ -332,6 +380,7 @@ pub fn autolink(
     report
         .unmatched
         .sort_by(|a, b| b.bytes.cmp(&a.bytes).then_with(|| a.target.cmp(&b.target)));
+    report.kept = kept;
 
     Ok((out, report))
 }
@@ -518,6 +567,62 @@ mod tests {
             "resolving neither merged nor duplicated a struct"
         );
         assert!(crate::hash::same_structure(&target, &resolved.archive));
+    }
+
+    /// A Slippi mesh that copies a vanilla mesh's vertices and display list but has its own
+    /// shape header, with a material that many disc files share: the vertices are linked, the
+    /// display list is structure and the material a common value, so both stay in the file.
+    #[test]
+    fn links_what_is_visual_and_not_common() {
+        let ext = |data: Vec<u8>, pointers: &[(u32, usize)]| Extent {
+            data,
+            phase: 0,
+            pointers: pointers.iter().map(|&(field, target)| Pointer { field, target }).collect(),
+            origin: 0,
+        };
+        let mesh = |joint: Vec<u8>, mobj: Vec<u8>, pobj: Vec<u8>, name: &str| {
+            let mut a = Archive::default();
+            a.extents = vec![
+                ext(joint, &[(0x10, 1)]),
+                ext(vec![0; 0x10], &[(0x8, 2), (0xc, 4)]),
+                ext(mobj, &[(0xc, 3)]),
+                ext(vec![0xff; 0x14], &[]),
+                ext(pobj, &[(0x8, 5), (0x10, 7)]),
+                ext(vec![0; 0x18], &[(0x14, 6)]),
+                ext(vec![3; 48], &[]),
+                ext(vec![0x80, 0, 4, 0, 1, 2, 3, 0], &[]),
+            ];
+            a.roots = vec![Root {
+                name: name.into(),
+                extent: 0,
+            }];
+            // as read from a file, so every struct knows its offset
+            Archive::parse(&a.serialize().unwrap()).unwrap()
+        };
+        let disc = mesh(vec![0; 0x40], vec![0; 0x18], vec![0; 0x18], "Disc_joint");
+        let mut own = vec![0; 0x18];
+        own[0xc] = 0x80;
+        let target = mesh(vec![1; 0x40], vec![2; 0x18], own, "Slippi_joint");
+
+        let mut index = SourceIndex::new();
+        index.add("Disc.dat", &disc);
+        let mut other = Archive::default();
+        other.extents = vec![ext(vec![0; 4], &[(0, 1)]), ext(vec![0xff; 0x14], &[])];
+        other.roots = vec![Root {
+            name: "other".into(),
+            extent: 0,
+        }];
+        for n in 0..17 {
+            index.add(&format!("Other{n}.dat"), &other);
+        }
+        let disc_bytes = disc.serialize().unwrap();
+        let mut load = |_: &str| Ok(disc_bytes.clone());
+        let (_, report) = autolink(&target, &index, &mut load, &Options::defaults()).unwrap();
+
+        let links: Vec<_> = report.links.iter().map(|l| (l.kind, l.target.as_str())).collect();
+        assert_eq!(links, [("attributes", "Slippi_joint/10/c/8")]);
+        let kept: Vec<_> = report.kept.iter().map(|k| (k.kind, k.structural, k.files)).collect();
+        assert_eq!(kept, [("material", false, 18), ("display list", true, 1)]);
     }
 
     #[test]
