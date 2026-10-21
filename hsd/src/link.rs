@@ -11,7 +11,13 @@
 //! with `*n` for a repeated hop (so `MnSelectChrDataTable/68/0/4*6/8`), or as an absolute file
 //! offset `0x<hex>`, as HSDRawViewer shows it. Paths are preferred: they survive a re-saved or
 //! modified disc file as long as its structure is unchanged, so a user's edited texture is picked
-//! up instead of breaking the link. `at` gives an offset to try when a path does not resolve.
+//! up instead of breaking the link.
+//!
+//! A mod can also rebuild the structure around an asset, and then the path leads nowhere. The
+//! recorded asset is then searched for by its hash: at the `at` offset, anywhere else in the file,
+//! and in the other region's copy of the file (`.dat` for `.usd` and the reverse), which such
+//! mods rarely touch. As a last resort the other region's asset at the same path is used even if
+//! it differs from the recorded one.
 //!
 //! The asset is that struct plus everything it points to. `cut` names pointer fields of the first
 //! struct which are not followed, so a joint can be linked without its siblings. `sha` records the
@@ -53,8 +59,12 @@ pub enum LinkStatus {
     Exact,
     /// Found by its anchor, but the disc's asset differs from the recorded one (a modded disc).
     Modified,
-    /// The path did not resolve; found at the fallback offset, confirmed by the hash.
+    /// The anchor did not resolve; the recorded asset was found by its hash somewhere else in the
+    /// file or in the other region's copy of it.
     Fallback,
+    /// Neither the anchor nor the hash found the asset; the other region's copy of the file
+    /// supplied its asset at the same path, which differs from the recorded one.
+    Regional,
     /// Found by its anchor; the link records no hash to check against.
     Unchecked,
 }
@@ -65,6 +75,7 @@ impl LinkStatus {
             LinkStatus::Exact => "exact",
             LinkStatus::Modified => "modified",
             LinkStatus::Fallback => "fallback",
+            LinkStatus::Regional => "regional",
             LinkStatus::Unchecked => "unchecked",
         }
     }
@@ -76,6 +87,8 @@ pub struct ResolvedLink {
     pub symbol: String,
     pub locator: Locator,
     pub status: LinkStatus,
+    /// Disc file the asset was copied from: the locator's file, or its other-region copy.
+    pub source: String,
     /// Extents of the resolved archive copied in for this link, the linked struct first.
     pub extents: Vec<usize>,
 }
@@ -224,6 +237,9 @@ impl Anchor {
 
 /// Short structural hash of an asset in `archive`, as recorded in a locator's `sha` option.
 pub fn asset_sha(archive: &Archive, extent: usize, cut: &[u32]) -> String {
+    if cut.is_empty() {
+        return hash::hex(&hash::extent_hash(archive, extent))[..8].to_string();
+    }
     // Hash the subtree with the cut pointers removed, without touching the archive.
     let mut view = archive.clone();
     view.extents[extent].pointers.retain(|p| !cut.contains(&p.field));
@@ -304,40 +320,229 @@ fn follow(archive: &Archive, root: &str, hops: &[u32]) -> std::result::Result<us
     Ok(cur)
 }
 
-/// Find the extent a locator names in its (already loaded) disc file.
-/// Returns the extent and whether the fallback offset had to be used.
-fn find_asset(src: &Archive, locator: &Locator, symbol: &str, warnings: &mut Vec<String>) -> Result<(usize, bool)> {
-    let file = &locator.file;
-    let by_offset = |offset: u32| {
-        src.extent_at_origin(offset.wrapping_sub(HEADER_SIZE))
-            .ok_or_else(|| Error::NotAStruct {
-                file: file.clone(),
-                offset,
-            })
+/// The extent an anchor names in `archive`.
+fn at_anchor(archive: &Archive, anchor: &Anchor) -> std::result::Result<usize, String> {
+    match anchor {
+        Anchor::Offset(offset) => archive
+            .extent_at_origin(offset.wrapping_sub(HEADER_SIZE))
+            .ok_or_else(|| format!("no struct starts at file offset 0x{offset:x}")),
+        Anchor::Path { root, hops } => follow(archive, root, hops),
+    }
+}
+
+/// The other region's copy of a disc file. Menu and scene archives ship as a Japanese `.dat` and
+/// an American `.usd` with the same structure, and a mod usually rebuilds only the one it targets.
+fn regional_twin(file: &str) -> Option<String> {
+    let (stem, ext) = file.rsplit_once('.')?;
+    let other = match ext {
+        "usd" => "dat",
+        "dat" => "usd",
+        _ => return None,
     };
-    match &locator.anchor {
-        Anchor::Offset(offset) => by_offset(*offset).map(|e| (e, false)),
-        Anchor::Path { root, hops } => match follow(src, root, hops) {
-            Ok(extent) => Ok((extent, false)),
-            Err(reason) => {
-                let bad_path = || Error::BadPath {
-                    symbol: symbol.to_string(),
-                    reason: reason.clone(),
-                };
-                let Some(at) = locator.at else {
-                    return Err(bad_path());
-                };
-                // The fallback offset is only trusted when the recorded hash confirms it.
-                let extent = by_offset(at).map_err(|_| bad_path())?;
-                if let Some(expected) = &locator.sha
-                    && asset_sha(src, extent, &locator.cut) != *expected
-                {
-                    return Err(bad_path());
-                }
-                warnings.push(format!("{symbol}: path did not resolve ({reason}); used the fallback offset"));
-                Ok((extent, true))
-            },
+    Some(format!("{stem}.{other}"))
+}
+
+/// Structural hash of `extent` without the cut pointers of its first struct, from the hashes of
+/// every extent in the archive.
+fn cut_hash(archive: &Archive, hashes: &[[u8; 20]], extent: usize, cut: &[u32]) -> [u8; 20] {
+    if cut.is_empty() {
+        return hashes[extent];
+    }
+    let e = &archive.extents[extent];
+    let mut children: Vec<(u32, [u8; 20])> = e
+        .pointers
+        .iter()
+        .filter(|p| !cut.contains(&p.field))
+        .map(|p| (p.field, hashes[p.target]))
+        .collect();
+    children.sort_by_key(|c| c.0);
+    hash::combine(&e.data, &children)
+}
+
+/// A disc file loaded for resolving.
+struct Source {
+    archive: Archive,
+    /// Structural hash of every extent, computed the first time an asset has to be searched for.
+    hashes: Option<Vec<[u8; 20]>>,
+}
+
+impl Source {
+    /// Find the asset a locator records by its hash: at the fallback offset, else anywhere.
+    fn find_by_hash(&mut self, locator: &Locator) -> Option<usize> {
+        let sha = locator.sha.as_ref()?;
+        let archive = &self.archive;
+        if let Some(at) = locator.at
+            && let Some(extent) = archive.extent_at_origin(at.wrapping_sub(HEADER_SIZE))
+            && asset_sha(archive, extent, &locator.cut) == *sha
+        {
+            return Some(extent);
+        }
+        let hashes = self.hashes.get_or_insert_with(|| {
+            let mut hasher = hash::Hasher::new(archive);
+            (0..archive.extents.len()).map(|i| hasher.extent(i)).collect()
+        });
+        let prefix: Vec<u8> = (0..sha.len() / 2)
+            .map(|i| u8::from_str_radix(&sha[2 * i..2 * i + 2], 16).unwrap_or(0))
+            .collect();
+        // Hashes memoized across the whole file can differ from a fresh one for an asset that
+        // loops back into itself, so they only pick candidates.
+        (0..archive.extents.len())
+            .filter(|&i| cut_hash(archive, hashes, i, &locator.cut).starts_with(&prefix))
+            .find(|&i| asset_sha(archive, i, &locator.cut) == *sha)
+    }
+}
+
+/// The disc files read while resolving, each read at most once.
+struct Sources<'a> {
+    load: &'a mut dyn FnMut(&str) -> std::result::Result<Vec<u8>, String>,
+    /// Every file asked for, or why it could not be read.
+    files: BTreeMap<String, std::result::Result<Source, String>>,
+    /// Files read successfully, in order.
+    read: Vec<String>,
+}
+
+impl Sources<'_> {
+    fn get(&mut self, file: &str) -> std::result::Result<&mut Source, String> {
+        if !self.files.contains_key(file) {
+            let source = (self.load)(file).and_then(|bytes| {
+                Archive::parse(&bytes)
+                    .map(|archive| Source { archive, hashes: None })
+                    .map_err(|e| e.to_string())
+            });
+            if source.is_ok() {
+                self.read.push(file.to_string());
+            }
+            self.files.insert(file.to_string(), source);
+        }
+        self.files
+            .get_mut(file)
+            .expect("just inserted")
+            .as_mut()
+            .map_err(|e| e.clone())
+    }
+}
+
+/// Where a link's asset was found.
+struct Found {
+    file: String,
+    extent: usize,
+    status: LinkStatus,
+}
+
+/// Find the struct a locator names: by its anchor in the named file, which follows a mod that
+/// replaced the asset in place; else by its recorded hash in that file, then in the other region's
+/// copy of the file; else the other region's asset at the same path.
+fn find_asset(sources: &mut Sources, locator: &Locator, symbol: &str, warnings: &mut Vec<String>) -> Result<Found> {
+    let file = locator.file.as_str();
+    let found = |file: &str, extent: usize, status: LinkStatus| {
+        Ok(Found {
+            file: file.to_string(),
+            extent,
+            status,
+        })
+    };
+    // Files searched by hash, for the error message.
+    let mut searched = Vec::new();
+    let (problem, unreadable) = match sources.get(file) {
+        Err(reason) => (format!("{file} could not be read ({reason})"), Some(reason)),
+        Ok(src) => {
+            let reason = match at_anchor(&src.archive, &locator.anchor) {
+                Ok(extent) => {
+                    let status = match &locator.sha {
+                        None => LinkStatus::Unchecked,
+                        Some(expected) => {
+                            let actual = asset_sha(&src.archive, extent, &locator.cut);
+                            if actual == *expected {
+                                LinkStatus::Exact
+                            } else if locator.strict {
+                                return Err(Error::HashMismatch {
+                                    symbol: symbol.to_string(),
+                                    expected: expected.clone(),
+                                    found: actual,
+                                });
+                            } else {
+                                warnings.push(format!(
+                                    "{symbol}: the asset on the disc differs from the recorded one ({expected} vs {actual}); using the disc's version"
+                                ));
+                                LinkStatus::Modified
+                            }
+                        },
+                    };
+                    return found(file, extent, status);
+                },
+                Err(reason) => reason,
+            };
+            if let Some(extent) = src.find_by_hash(locator) {
+                let offset = src.archive.extents[extent].origin + HEADER_SIZE;
+                warnings.push(format!(
+                    "{symbol}: {reason}; found the recorded asset at 0x{offset:x} in {file}"
+                ));
+                return found(file, extent, LinkStatus::Fallback);
+            }
+            if locator.sha.is_some() {
+                searched.push(file.to_string());
+            } else if let Some(at) = locator.at
+                && let Some(extent) = src.archive.extent_at_origin(at.wrapping_sub(HEADER_SIZE))
+            {
+                // Without a hash the fallback offset cannot be checked, only trusted.
+                warnings.push(format!("{symbol}: {reason}; used the fallback offset"));
+                return found(file, extent, LinkStatus::Fallback);
+            }
+            (reason, None)
         },
+    };
+
+    if let Some(twin) = regional_twin(file)
+        && let Ok(src) = sources.get(&twin)
+    {
+        // An offset means nothing in another file, but a path names the same asset.
+        let slot = match locator.anchor {
+            Anchor::Path { .. } => at_anchor(&src.archive, &locator.anchor).ok(),
+            Anchor::Offset(_) => None,
+        };
+        let slot_is_recorded = slot.is_some_and(|e| {
+            locator
+                .sha
+                .as_ref()
+                .is_some_and(|sha| asset_sha(&src.archive, e, &locator.cut) == *sha)
+        });
+        let recorded = if slot_is_recorded { slot } else { src.find_by_hash(locator) };
+        if let Some(extent) = recorded {
+            warnings.push(format!("{symbol}: {problem}; found the recorded asset in {twin}"));
+            return found(&twin, extent, LinkStatus::Fallback);
+        }
+        if let Some(extent) = slot
+            && !locator.strict
+        {
+            warnings.push(format!(
+                "{symbol}: {problem}; used the same asset of {twin}, which differs from the recorded one"
+            ));
+            return found(&twin, extent, LinkStatus::Regional);
+        }
+        if locator.sha.is_some() {
+            searched.push(twin);
+        }
+    }
+
+    if let Some(reason) = unreadable {
+        return Err(Error::Source {
+            file: file.to_string(),
+            reason,
+        });
+    }
+    match locator.anchor {
+        Anchor::Offset(offset) => Err(Error::NotAStruct {
+            file: file.to_string(),
+            offset,
+        }),
+        Anchor::Path { .. } => Err(Error::BadPath {
+            symbol: symbol.to_string(),
+            reason: if searched.is_empty() {
+                problem
+            } else {
+                format!("{problem}; the recorded asset is not in {}", searched.join(" or "))
+            },
+        }),
     }
 }
 
@@ -390,7 +595,11 @@ pub fn link(archive: &mut Archive, extent: usize, symbol: &str) -> Result<()> {
 pub fn resolve(archive: &Archive, load: &mut dyn FnMut(&str) -> std::result::Result<Vec<u8>, String>) -> Result<Resolution> {
     let mut out = archive.clone();
     out.refs.clear();
-    let mut sources: BTreeMap<String, Archive> = BTreeMap::new();
+    let mut sources = Sources {
+        load,
+        files: BTreeMap::new(),
+        read: Vec::new(),
+    };
     let mut resolution = Resolution::default();
     let mut resolved_any = false;
 
@@ -400,43 +609,9 @@ pub fn resolve(archive: &Archive, load: &mut dyn FnMut(&str) -> std::result::Res
             continue;
         }
         let locator = Locator::parse(&r.name)?;
-        if !sources.contains_key(&locator.file) {
-            let bytes = load(&locator.file).map_err(|reason| Error::Source {
-                file: locator.file.clone(),
-                reason,
-            })?;
-            let parsed = Archive::parse(&bytes).map_err(|e| Error::Source {
-                file: locator.file.clone(),
-                reason: e.to_string(),
-            })?;
-            sources.insert(locator.file.clone(), parsed);
-            resolution.sources.push(locator.file.clone());
-        }
-        let src = &sources[&locator.file];
-        let (root, fallback) = find_asset(src, &locator, &r.name, &mut resolution.warnings)?;
-
-        let mut status = match (&locator.sha, fallback) {
-            (_, true) => LinkStatus::Fallback,
-            (Some(_), false) => LinkStatus::Exact,
-            (None, false) => LinkStatus::Unchecked,
-        };
-        if let Some(expected) = &locator.sha {
-            let found = asset_sha(src, root, &locator.cut);
-            if &found != expected {
-                status = LinkStatus::Modified;
-                if locator.strict {
-                    return Err(Error::HashMismatch {
-                        symbol: r.name.clone(),
-                        expected: expected.clone(),
-                        found,
-                    });
-                }
-                resolution.warnings.push(format!(
-                    "{}: the asset on the disc differs from the recorded one ({expected} vs {found}); using the disc's version",
-                    r.name
-                ));
-            }
-        }
+        let found = find_asset(&mut sources, &locator, &r.name, &mut resolution.warnings)?;
+        let src = &sources.get(&found.file).expect("the asset was found in it").archive;
+        let root = found.extent;
 
         let closure = src.reachable(&[root], |e, p| e == root && locator.cut.contains(&p.field));
         let mut ordered = closure.clone();
@@ -474,7 +649,8 @@ pub fn resolve(archive: &Archive, load: &mut dyn FnMut(&str) -> std::result::Res
         resolution.links.push(ResolvedLink {
             symbol: r.name.clone(),
             locator,
-            status,
+            status: found.status,
+            source: found.file,
             extents,
         });
         resolved_any = true;
@@ -483,6 +659,7 @@ pub fn resolve(archive: &Archive, load: &mut dyn FnMut(&str) -> std::result::Res
     if resolved_any {
         out.invalidate_strings();
     }
+    resolution.sources = sources.read;
     resolution.archive = out;
     Ok(resolution)
 }
@@ -704,7 +881,11 @@ mod tests {
         link(&mut ok, 2, &format!("slp:Sample.dat:no_such_root/4:at=0x60:sha={sha}")).unwrap();
         let resolved = resolve(&ok, &mut disc_loader(&disc)).unwrap();
         assert_eq!(resolved.warnings.len(), 1);
-        assert!(resolved.warnings[0].contains("fallback"));
+        assert!(
+            resolved.warnings[0].contains("found the recorded asset at 0x60"),
+            "{:?}",
+            resolved.warnings
+        );
         assert_eq!(resolved.links[0].status, LinkStatus::Fallback);
         assert!(hash::same_structure(&original, &resolved.archive));
 
@@ -719,6 +900,104 @@ mod tests {
             resolve(&none, &mut disc_loader(&disc)).unwrap_err(),
             Error::BadPath { .. }
         ));
+    }
+
+    fn files_loader(files: Vec<(&str, Vec<u8>)>) -> impl FnMut(&str) -> std::result::Result<Vec<u8>, String> + '_ {
+        move |name| {
+            files
+                .iter()
+                .find(|(n, _)| *n == name)
+                .map(|(_, bytes)| bytes.clone())
+                .ok_or_else(|| "no such file".into())
+        }
+    }
+
+    /// A mod that rebuilds the structure around an asset but keeps the asset: the path and the
+    /// fallback offset both miss, and the asset is found by its hash where it now sits.
+    #[test]
+    fn moved_asset_is_found_by_hash() {
+        let original = crate::archive::tests::sample();
+        let mut linked = original.clone();
+        let symbol = locate(&original, "Sample.dat", 2, &[]).symbol();
+        link(&mut linked, 2, &symbol).unwrap();
+
+        let mut moved = original.clone();
+        moved.extents[0].pointers.retain(|p| p.target != 2);
+        moved.extents[0].pointers.push(Pointer { field: 0xc, target: 3 });
+        moved.extents[1].data.extend_from_slice(&[0; 32]); // pushes the buffer off its recorded offset
+        moved.extents.push(Extent {
+            data: vec![0, 0, 0, 0, 1, 1, 1, 1],
+            phase: 0,
+            pointers: vec![Pointer { field: 0, target: 2 }],
+            origin: 0,
+        });
+        let disc = moved.serialize().unwrap();
+
+        let resolved = resolve(&linked, &mut disc_loader(&disc)).unwrap();
+        assert_eq!(resolved.links[0].status, LinkStatus::Fallback);
+        assert_eq!(resolved.links[0].source, "Sample.dat");
+        assert_eq!(resolved.warnings.len(), 1, "{:?}", resolved.warnings);
+        assert!(hash::same_structure(&original, &resolved.archive));
+    }
+
+    /// When the named file no longer holds the asset at all, the other region's copy of the file
+    /// stands in: the recorded asset if it is there, else its asset at the same path.
+    #[test]
+    fn regional_copy_stands_in() {
+        let original = crate::archive::tests::sample();
+        let mut linked = original.clone();
+        let symbol = locate(&original, "Sample.usd", 2, &[]).symbol();
+        link(&mut linked, 2, &symbol).unwrap();
+
+        // The American file was rebuilt without the buffer; the Japanese one is untouched.
+        let mut gutted = original.clone();
+        gutted.extents[0].pointers.retain(|p| p.target != 2);
+        let usd = gutted.serialize().unwrap();
+        let dat = original.serialize().unwrap();
+
+        let resolved = resolve(
+            &linked,
+            &mut files_loader(vec![("Sample.usd", usd.clone()), ("Sample.dat", dat.clone())]),
+        )
+        .unwrap();
+        assert_eq!(resolved.links[0].status, LinkStatus::Fallback);
+        assert_eq!(resolved.links[0].source, "Sample.dat");
+        assert_eq!(resolved.sources, vec!["Sample.usd", "Sample.dat"]);
+        assert!(hash::same_structure(&original, &resolved.archive));
+
+        // also when the named file is missing altogether
+        let resolved = resolve(&linked, &mut files_loader(vec![("Sample.dat", dat)])).unwrap();
+        assert_eq!(resolved.links[0].source, "Sample.dat");
+
+        // A Japanese asset that differs is still the closest thing to the recorded one.
+        let mut regional = original.clone();
+        regional.extents[2].data[0] = 8;
+        let jp = regional.serialize().unwrap();
+        let resolved = resolve(
+            &linked,
+            &mut files_loader(vec![("Sample.usd", usd.clone()), ("Sample.dat", jp.clone())]),
+        )
+        .unwrap();
+        assert_eq!(resolved.links[0].status, LinkStatus::Regional);
+        assert_eq!(resolved.archive.extents[resolved.links[0].extents[0]].data[0], 8);
+
+        // but a strict link wants the recorded asset or nothing
+        let mut strict = original.clone();
+        let mut l = locate(&original, "Sample.usd", 2, &[]);
+        l.strict = true;
+        link(&mut strict, 2, &l.symbol()).unwrap();
+        let err = resolve(
+            &strict,
+            &mut files_loader(vec![("Sample.usd", usd.clone()), ("Sample.dat", jp)]),
+        )
+        .unwrap_err();
+        assert!(matches!(err, Error::BadPath { .. }), "{err}");
+
+        let err = resolve(&linked, &mut files_loader(vec![("Sample.usd", usd)])).unwrap_err();
+        assert!(
+            matches!(&err, Error::BadPath { reason, .. } if reason.contains("not in Sample.usd")),
+            "{err}"
+        );
     }
 
     #[test]

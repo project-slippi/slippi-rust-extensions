@@ -18,6 +18,7 @@ pub mod autolink;
 pub mod error;
 pub mod hash;
 pub mod link;
+pub mod schema;
 
 pub use archive::{Archive, Extent, ExternRef, Pointer, Root};
 pub use autolink::{Options as AutolinkOptions, Report, SourceIndex, autolink};

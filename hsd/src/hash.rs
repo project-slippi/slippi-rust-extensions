@@ -39,16 +39,12 @@ impl<'a> Hasher<'a> {
             return Sha1::digest(b"cycle").into();
         }
         self.in_progress[idx] = true;
-        let extent = &self.archive.extents[idx];
-        let mut sha = Sha1::new();
-        sha.update(trimmed(&extent.data));
+        let archive = self.archive;
+        let extent = &archive.extents[idx];
         let mut pointers = extent.pointers.clone();
         pointers.sort_by_key(|p| p.field);
-        for p in pointers {
-            sha.update(p.field.to_be_bytes());
-            sha.update(self.extent(p.target));
-        }
-        let h: [u8; 20] = sha.finalize().into();
+        let children: Vec<(u32, [u8; 20])> = pointers.iter().map(|p| (p.field, self.extent(p.target))).collect();
+        let h = combine(&extent.data, &children);
         self.in_progress[idx] = false;
         self.memo[idx] = Some(h);
         h
@@ -72,6 +68,18 @@ impl<'a> Hasher<'a> {
         }
         sha.finalize().into()
     }
+}
+
+/// Hash of one struct from its bytes and the hashes of the structs its pointers target, which
+/// must be given in field order.
+pub fn combine(data: &[u8], children: &[(u32, [u8; 20])]) -> [u8; 20] {
+    let mut sha = Sha1::new();
+    sha.update(trimmed(data));
+    for (field, child) in children {
+        sha.update(field.to_be_bytes());
+        sha.update(child);
+    }
+    sha.finalize().into()
 }
 
 /// Structural hash of an archive.

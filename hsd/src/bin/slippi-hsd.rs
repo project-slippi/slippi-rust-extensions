@@ -7,7 +7,10 @@
 //!   slippi-hsd locate <archive> <file offset> [cut...]  link symbol for an asset (path, offset, hash)
 //!   slippi-hsd link <archive> -o <out> <file offset>=<symbol>...
 //!   slippi-hsd resolve <archive> --disc <dir> -o <out> [--map <json>]   --map lists each link's structs
-//!   slippi-hsd autolink <archive> --disc <dir> -o <out> [--min N] [--prefer a,b] [--only a,b] [--report <file>]
+//!   slippi-hsd autolink <archive> --disc <dir> -o <out> [--min N] [--common N] [--prefer a,b] [--only a,b] [--report <file>]
+//!       links matches that hold something visual; --min is the size from which a struct of unknown
+//!       type counts as visual, and a match in more than --common disc files (default 16) is a
+//!       common value rather than an asset
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -19,7 +22,7 @@ use slippi_hsd::{Archive, AutolinkOptions, Locator, Resolution, SourceIndex, aut
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage:\n  slippi-hsd info <archive>\n  slippi-hsd roundtrip <file or dir>...\n  slippi-hsd compare <a> <b>\n  slippi-hsd same <a> <b> --disc <dir>\n  slippi-hsd link <archive> -o <out> <file offset>=<symbol>...\n  slippi-hsd resolve <archive> --disc <dir> -o <out> [--map <json>]\n  slippi-hsd autolink <archive> --disc <dir> -o <out> [--min N] [--prefer a,b] [--only a,b] [--report <file>]"
+        "usage:\n  slippi-hsd info <archive>\n  slippi-hsd roundtrip <file or dir>...\n  slippi-hsd compare <a> <b>\n  slippi-hsd same <a> <b> --disc <dir>\n  slippi-hsd link <archive> -o <out> <file offset>=<symbol>...\n  slippi-hsd resolve <archive> --disc <dir> -o <out> [--map <json>]\n  slippi-hsd autolink <archive> --disc <dir> -o <out> [--min N] [--common N] [--prefer a,b] [--only a,b] [--report <file>]"
     );
     ExitCode::from(2)
 }
@@ -203,6 +206,15 @@ fn do_resolve(archive: &Path, disc: &Path, out: &Path, map: Option<PathBuf>) -> 
     for warning in &resolution.warnings {
         println!("warning: {warning}");
     }
+    let mut statuses: Vec<(&str, usize)> = Vec::new();
+    for l in &resolution.links {
+        match statuses.iter_mut().find(|(name, _)| *name == l.status.name()) {
+            Some((_, n)) => *n += 1,
+            None => statuses.push((l.status.name(), 1)),
+        }
+    }
+    let statuses: Vec<String> = statuses.iter().map(|(name, n)| format!("{n} {name}")).collect();
+    println!("links: {}", statuses.join(", "));
     let bytes = resolution.archive.serialize().map_err(|e| e.to_string())?;
     fs::write(out, &bytes).map_err(|e| e.to_string())?;
     if let Some(map) = map {
@@ -236,6 +248,7 @@ fn link_map(resolution: &Resolution) -> serde_json::Value {
             serde_json::json!({
                 "symbol": l.symbol,
                 "file": l.locator.file,
+                "source": l.source,
                 "anchor": l.locator.anchor.text(),
                 "status": l.status.name(),
                 "offset": structs[0],
@@ -290,9 +303,22 @@ fn report_text(report: &slippi_hsd::Report) -> String {
     t.push_str("links, largest first:\n");
     for l in &links {
         t.push_str(&format!(
-            "  {:>8} B {:>4} structs  {} <- {}\n",
-            l.bytes, l.extents, l.target, l.symbol
+            "  {:>8} B {:>4} structs  {:<12} {} <- {}\n",
+            l.bytes, l.extents, l.kind, l.target, l.symbol
         ));
+    }
+    for (structural, heading) in [
+        (true, "matches left in the file, nothing visual in them"),
+        (false, "matches left in the file, common values"),
+    ] {
+        let kept: Vec<_> = report.kept.iter().filter(|k| k.structural == structural).collect();
+        t.push_str(&format!("{heading}: {}\n", kept.len()));
+        for k in kept {
+            t.push_str(&format!(
+                "  {:>8} B  {:<12} in {:>3} disc files  {}\n",
+                k.bytes, k.kind, k.files, k.target
+            ));
+        }
     }
     t.push_str(&format!(
         "unmatched buffers of {} bytes or more: {}\n",
@@ -309,9 +335,7 @@ fn do_autolink(
     archive: &Path,
     disc: &Path,
     out: &Path,
-    min: Option<usize>,
-    prefer: Vec<String>,
-    only: Vec<String>,
+    options: &AutolinkOptions,
     report_path: Option<PathBuf>,
 ) -> Result<(), String> {
     let parsed = load(archive)?;
@@ -325,14 +349,8 @@ fn do_autolink(
         parsed
     };
     let index = build_index(disc)?;
-    let mut options = AutolinkOptions::defaults();
-    if let Some(m) = min {
-        options.min_bytes = m;
-    }
-    options.prefer = prefer;
-    options.only = only;
     let start = Instant::now();
-    let (linked, report) = autolink(&full, &index, &mut read_disc, &options).map_err(|e| e.to_string())?;
+    let (linked, report) = autolink(&full, &index, &mut read_disc, options).map_err(|e| e.to_string())?;
     let bytes = linked.serialize().map_err(|e| e.to_string())?;
     fs::write(out, &bytes).map_err(|e| e.to_string())?;
     println!(
@@ -405,7 +423,7 @@ fn main() -> ExitCode {
         },
         Some("autolink") if args.len() >= 6 => match (flag("--disc"), flag("-o")) {
             (Some(disc), Some(out)) => {
-                let min = flag("--min").and_then(|m| m.to_string_lossy().parse::<usize>().ok());
+                let number = |name: &str| flag(name).and_then(|n| n.to_string_lossy().parse::<usize>().ok());
                 let list = |name: &str| -> Vec<String> {
                     flag(name)
                         .map(|p| {
@@ -417,15 +435,16 @@ fn main() -> ExitCode {
                         })
                         .unwrap_or_default()
                 };
-                do_autolink(
-                    Path::new(&args[1]),
-                    &disc,
-                    &out,
-                    min,
-                    list("--prefer"),
-                    list("--only"),
-                    flag("--report"),
-                )
+                let mut options = AutolinkOptions::defaults();
+                if let Some(min) = number("--min") {
+                    options.min_bytes = min;
+                }
+                if let Some(common) = number("--common") {
+                    options.common_files = common;
+                }
+                options.prefer = list("--prefer");
+                options.only = list("--only");
+                do_autolink(Path::new(&args[1]), &disc, &out, &options, flag("--report"))
             },
             _ => return usage(),
         },
