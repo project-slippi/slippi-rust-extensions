@@ -1,0 +1,22 @@
+[package]
+name = "slippi-hsd"
+description = "Parses HAL sysdolphin archives (.dat/.usd) and resolves Slippi asset links against disc files."
+version = "0.1.0"
+authors = [
+    "Slippi Team",
+]
+edition = "2024"
+publish = false
+
+[lib]
+name = "slippi_hsd"
+path = "src/lib.rs"
+
+[[bin]]
+name = "slippi-hsd"
+path = "src/bin/slippi-hsd.rs"
+
+[dependencies]
+serde_json = { workspace = true }
+sha1 = "0.10"
+thiserror = { workspace = true }
