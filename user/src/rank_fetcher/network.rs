@@ -80,24 +80,6 @@ struct MatchResultParticipant {
     pub post_match_rating_change: Option<f32>, // Null until the match is processed
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize)]
-#[serde(rename_all = "UPPERCASE")]
-pub enum MatchStatus {
-    Assigned,
-    Complete,
-    Abandoned,
-    Orphaned,
-    Terminated,
-    Error,
-    Unhandled,
-}
-
-impl Default for MatchStatus {
-    fn default() -> Self {
-        MatchStatus::Error // Default to error in case it's missing
-    }
-}
-
 #[derive(Clone, Copy, Debug, Default, serde::Deserialize)]
 struct MatchResultAPIResponse {
     // Include the participant
