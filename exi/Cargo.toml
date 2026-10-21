@@ -12,13 +12,16 @@ publish = false
 [features]
 default = []
 ishiiruka = [
-    "slippi-gg-api/ishiiruka"
+    "slippi-gg-api/ishiiruka",
+    "slippi-matchmaking/ishiiruka"
 ]
 mainline = [
-    "slippi-gg-api/mainline"
+    "slippi-gg-api/mainline",
+    "slippi-matchmaking/mainline"
 ]
 playback = [
-    "slippi-gg-api/playback"
+    "slippi-gg-api/playback",
+    "slippi-matchmaking/playback"
 ]
 
 [dependencies]
@@ -26,5 +29,6 @@ dolphin-integrations = { path = "../dolphin" }
 slippi-game-reporter = { path = "../game-reporter" }
 slippi-gg-api = { path = "../slippi-gg-api" }
 slippi-jukebox = { path = "../jukebox" }
+slippi-matchmaking = { path = "../matchmaking" }
 slippi-user = { path = "../user" }
 tracing = { workspace = true }

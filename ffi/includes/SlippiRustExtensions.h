@@ -8,6 +8,11 @@
 #include <stdlib.h>
 
 /**
+ * Size in bytes of the buffer `slprs_stun_build_request` fills.
+ */
+#define SLPRS_STUN_REQUEST_LEN 20
+
+/**
  * Indicates what type of direct code operation we're in.
  */
 typedef enum DirectCodeKind {
@@ -58,6 +63,57 @@ typedef struct RustIsoMd5Check {
    */
   int result;
 } RustIsoMd5Check;
+
+/**
+ * What one STUN server reported for the netplay socket. Filled in by
+ * `slprs_stun_parse_response`; leave it zeroed for a server that did not
+ * answer.
+ */
+typedef struct SlippiStunObservation {
+  /**
+   * False when the server did not answer, in which case the other fields
+   * are ignored.
+   */
+  bool answered;
+  /**
+   * Public IPv4 address as four octets.
+   */
+  uint8_t ip[4];
+  /**
+   * Public port in host order.
+   */
+  uint16_t port;
+} SlippiStunObservation;
+
+/**
+ * Everything the Dolphin side knows when it asks for a match. Strings must be
+ * valid, possibly empty, C strings; they are copied during the call.
+ */
+typedef struct SlippiMatchmakingRequest {
+  /**
+   * 0 ranked, 1 unranked, 2 direct, 3 teams, 4 party.
+   */
+  uint8_t mode;
+  /**
+   * Opponent connect code or lobby code as the raw Shift-JIS bytes the
+   * game provides. May be null when the length is zero.
+   */
+  const uint8_t *connect_code;
+  uintptr_t connect_code_len;
+  /**
+   * Local UDP port the ENet host is bound to.
+   */
+  uint16_t netplay_port;
+  /**
+   * "ip:port" on the local network, or empty.
+   */
+  const char *lan_addr;
+  /**
+   * What each of two STUN servers reported for the netplay socket, in the
+   * order they were asked. The NAT is classified from them on this side.
+   */
+  struct SlippiStunObservation stun[2];
+} SlippiMatchmakingRequest;
 
 /**
  * Rank info that we vend back to the Dolphin side of things.
@@ -287,6 +343,57 @@ void slprs_logging_update_container(const char *kind, bool enabled, int level);
  * For more information, see `dolphin_logger::update_container`.
  */
 void slprs_mainline_logging_update_log_level(int level);
+
+/**
+ * Starts a matchmaking session and returns its id. Any session already
+ * running is cancelled first. Progress is polled with `slprs_mm_state`.
+ */
+uint64_t slprs_mm_start(uintptr_t exi_device_instance_ptr, struct SlippiMatchmakingRequest request);
+
+/**
+ * Current session state: 0 idle, 1 connecting, 2 queued, 3 matched, 4 failed.
+ */
+int slprs_mm_state(uintptr_t exi_device_instance_ptr);
+
+/**
+ * Once the state is matched, returns the match message exactly as the service
+ * sent it, or null if it was already taken. Free with `slprs_mm_free_string`.
+ */
+char *slprs_mm_take_result_json(uintptr_t exi_device_instance_ptr);
+
+/**
+ * Once the state is failed, returns why. Free with `slprs_mm_free_string`.
+ */
+char *slprs_mm_error_message(uintptr_t exi_device_instance_ptr);
+
+/**
+ * Leaves the queue and ends the session with the given id. A stale id from an
+ * earlier session is ignored so an old matchmaking object being torn down
+ * cannot cancel a newer search.
+ */
+void slprs_mm_cancel(uintptr_t exi_device_instance_ptr, uint64_t session_id);
+
+/**
+ * Frees a string returned by another `slprs_mm_*` function.
+ */
+void slprs_mm_free_string(char *ptr);
+
+/**
+ * Writes a STUN binding request with a fresh transaction id into `out`, which
+ * must have room for `SLPRS_STUN_REQUEST_LEN` bytes. Send it to a STUN server
+ * from the netplay socket, then pass the reply to `slprs_stun_parse_response`.
+ */
+void slprs_stun_build_request(uint8_t *out);
+
+/**
+ * Reads the public IPv4 address and port out of a STUN reply to `request`
+ * into `out`. Returns false, leaving `out` untouched, if the bytes are not a
+ * success reply to that request.
+ */
+bool slprs_stun_parse_response(const uint8_t *request,
+                               const uint8_t *response,
+                               uintptr_t response_len,
+                               struct SlippiStunObservation *out);
 
 /**
  * Fetches the result of a recently played match via its ID.

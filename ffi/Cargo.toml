@@ -22,19 +22,22 @@ ishiiruka = [
     "dolphin-integrations/ishiiruka",
     "slippi-game-reporter/ishiiruka",
     "slippi-exi-device/ishiiruka",
-    "slippi-user/ishiiruka"
+    "slippi-user/ishiiruka",
+    "slippi-matchmaking/ishiiruka"
 ]
 mainline = [
     "dolphin-integrations/mainline",
     "slippi-game-reporter/mainline",
     "slippi-exi-device/mainline",
-    "slippi-user/mainline"
+    "slippi-user/mainline",
+    "slippi-matchmaking/mainline"
 ]
 playback = [
     "dolphin-integrations/playback",
     "slippi-game-reporter/playback",
     "slippi-exi-device/playback",
-    "slippi-user/playback"
+    "slippi-user/playback",
+    "slippi-matchmaking/playback"
 ]
 
 [dependencies]
@@ -42,5 +45,6 @@ dolphin-integrations = { path = "../dolphin" }
 slippi-game-reporter = { path = "../game-reporter" }
 slippi-exi-device = { path = "../exi" }
 slippi-jukebox = { path = "../jukebox" }
+slippi-matchmaking = { path = "../matchmaking" }
 slippi-user = { path = "../user" }
 tracing = { workspace = true }
