@@ -1,0 +1,17 @@
+[package]
+name = "slippi-input-suggestions"
+description = "Sends the newest local adapter inputs between frames and uses the opponent's as predictions."
+version = "0.1.0"
+authors = [
+    "Slippi Team",
+]
+edition = "2024"
+publish = false
+
+[lib]
+name = "slippi_input_suggestions"
+path = "src/lib.rs"
+
+[dependencies]
+dolphin-integrations = { path = "../dolphin" }
+tracing = { workspace = true }

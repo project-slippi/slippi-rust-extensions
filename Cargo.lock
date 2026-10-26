@@ -1353,6 +1353,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "slippi-input-suggestions"
+version = "0.1.0"
+dependencies = [
+ "dolphin-integrations",
+ "tracing",
+]
+
+[[package]]
 name = "slippi-jukebox"
 version = "0.1.0"
 dependencies = [
@@ -1401,6 +1409,7 @@ dependencies = [
  "slippi-exi-device",
  "slippi-game-reporter",
  "slippi-hsd",
+ "slippi-input-suggestions",
  "slippi-jukebox",
  "slippi-matchmaking",
  "slippi-user",
