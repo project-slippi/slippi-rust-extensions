@@ -47,6 +47,7 @@ pub struct LocalFrame {
     /// The frame is being skipped for time sync, so the polled input was not sent and the same frame
     /// will be polled again.
     pub is_skip: bool,
+    pub is_advancing: bool,
     /// How many times the game has polled the local controller port, this frame's poll included.
     pub poll_count: Option<u64>,
     pub calibration: Option<Calibration>,
@@ -188,8 +189,15 @@ impl Game {
             self.handled_poll_count = info.poll_count;
         }
 
-        // A skipped frame is polled again; otherwise the next poll is for the following frame
-        self.next_poll_frame = if info.is_skip { info.frame } else { info.frame + 1 };
+        // A skipped frame is polled again. An advanced frame runs on this frame's poll, so the next poll is
+        // for the frame after it. Otherwise the next poll is for the following frame
+        self.next_poll_frame = if info.is_skip {
+            info.frame
+        } else if info.is_advancing {
+            info.frame + 2
+        } else {
+            info.frame + 1
+        };
         if !info.is_skip {
             self.last_communicated = Some(info.sent_pad);
         }
@@ -344,13 +352,21 @@ mod tests {
         p
     }
 
-    fn frame(game: &mut Game, frame: i32, poll_count: u64, data: AdapterPortData, skip: bool) -> Option<Suggestion> {
-        game.on_local_frame(LocalFrame {
+    fn local_frame(frame: i32, poll_count: u64, data: AdapterPortData) -> LocalFrame {
+        LocalFrame {
             frame,
-            is_skip: skip,
+            is_skip: false,
+            is_advancing: false,
             poll_count: Some(poll_count),
             calibration: Some(CALIBRATION),
             sent_pad: adapter_to_pad(&data, &CALIBRATION).unwrap(),
+        }
+    }
+
+    fn frame(game: &mut Game, frame: i32, poll_count: u64, data: AdapterPortData, skip: bool) -> Option<Suggestion> {
+        game.on_local_frame(LocalFrame {
+            is_skip: skip,
+            ..local_frame(frame, poll_count, data)
         })
     }
 
@@ -404,6 +420,37 @@ mod tests {
         let s = frame(&mut game, 101, 2, port_data(128, true), true).unwrap();
         // The frame is polled again, so the input applies from 101 + delay
         assert_eq!(s.target_frame, 103);
+    }
+
+    /// On a time sync advance the game runs the next frame right away on the same poll, so a change made
+    /// after that poll is first read for the frame after the advanced one.
+    #[test]
+    fn change_during_advance_targets_frame_after_advanced_one() {
+        let neutral = port_data(128, false);
+        let advancing = |frame, poll_count| LocalFrame {
+            is_advancing: true,
+            ..local_frame(frame, poll_count, neutral)
+        };
+
+        // Stored after poll 1 but before frame 100 was handled
+        let mut game = Game::new(config());
+        frame(&mut game, 99, 0, neutral, false);
+        assert_eq!(game.on_adapter_report(&[1, 0, 0, 0], &payload(port_data(128, true))), None);
+        let s = game.on_local_frame(advancing(100, 1)).unwrap();
+        assert_eq!(s.target_frame, 104);
+
+        // Stored after frame 100 was handled
+        let mut game = Game::new(config());
+        game.on_local_frame(advancing(100, 1));
+        let s = game.on_adapter_report(&[1, 0, 0, 0], &payload(port_data(128, true))).unwrap();
+        assert_eq!(s.target_frame, 104);
+
+        // The advanced frame 101 doesn't poll, and the next poll is still frame 102's
+        assert_eq!(frame(&mut game, 101, 1, neutral, false), None);
+        let s = game
+            .on_adapter_report(&[1, 0, 0, 0], &payload(port_data(200, false)))
+            .unwrap();
+        assert_eq!(s.target_frame, 104);
     }
 
     #[test]

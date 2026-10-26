@@ -127,6 +127,7 @@ typedef struct SlippiInputSuggestion {
 typedef struct SlippiInputSuggestionsLocalFrame {
   int32_t frame;
   bool is_skip;
+  bool is_advancing;
   bool has_poll;
   uint64_t poll_count;
   bool has_origin;
@@ -378,8 +379,8 @@ void slprs_input_suggestions_start_game(struct SlippiInputSuggestionsGameConfig 
 void slprs_input_suggestions_end_game(void);
 
 /**
- * Reports a local frame. Call on the CPU thread right after the frame's input was sent. Send the
- * returned suggestion if it is valid.
+ * Reports a local frame. Call on the CPU thread right after the frame's input was sent and Slippi decided
+ * whether to advance. Send the returned suggestion if it is valid.
  */
 struct SlippiInputSuggestion slprs_input_suggestions_on_local_frame(struct SlippiInputSuggestionsLocalFrame frame);
 

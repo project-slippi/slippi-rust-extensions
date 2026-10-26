@@ -51,6 +51,7 @@ pub struct SlippiInputSuggestionsGameConfig {
 pub struct SlippiInputSuggestionsLocalFrame {
     pub frame: i32,
     pub is_skip: bool,
+    pub is_advancing: bool,
     pub has_poll: bool,
     pub poll_count: u64,
     pub has_origin: bool,
@@ -79,8 +80,8 @@ pub extern "C" fn slprs_input_suggestions_end_game() {
     slippi_input_suggestions::end_game();
 }
 
-/// Reports a local frame. Call on the CPU thread right after the frame's input was sent. Send the
-/// returned suggestion if it is valid.
+/// Reports a local frame. Call on the CPU thread right after the frame's input was sent and Slippi decided
+/// whether to advance. Send the returned suggestion if it is valid.
 #[unsafe(no_mangle)]
 pub extern "C" fn slprs_input_suggestions_on_local_frame(frame: SlippiInputSuggestionsLocalFrame) -> SlippiInputSuggestion {
     let calibration = frame.has_origin.then_some(Calibration {
@@ -91,6 +92,7 @@ pub extern "C" fn slprs_input_suggestions_on_local_frame(frame: SlippiInputSugge
     slippi_input_suggestions::on_local_frame(LocalFrame {
         frame: frame.frame,
         is_skip: frame.is_skip,
+        is_advancing: frame.is_advancing,
         poll_count: frame.has_poll.then_some(frame.poll_count),
         calibration,
         sent_pad: frame.sent_pad,
