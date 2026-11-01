@@ -12,6 +12,7 @@ members = [
     "hsd",
     "input-suggestions",
     "jukebox",
+    "match-quality",
     "matchmaking",
     "slippi-gg-api",
     "user",

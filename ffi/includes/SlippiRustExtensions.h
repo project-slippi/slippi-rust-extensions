@@ -140,6 +140,40 @@ typedef struct SlippiInputSuggestionsLocalFrame {
 } SlippiInputSuggestionsLocalFrame;
 
 /**
+ * Settings for a game, passed when it starts.
+ */
+typedef struct SlippiMatchQualityGameConfig {
+  /**
+   * Whether the match may be terminated (ranked). Other modes are tracked and logged only.
+   */
+  bool can_terminate;
+  /**
+   * The local player's delay frames.
+   */
+  uint8_t delay;
+} SlippiMatchQualityGameConfig;
+
+/**
+ * One pass through the online frame handler.
+ */
+typedef struct SlippiMatchQualityFrame {
+  int32_t frame;
+  uint64_t time_us;
+  /**
+   * The frame is halted because the opponent's inputs are past the rollback limit.
+   */
+  bool is_stall;
+  /**
+   * The newest frame we have the opponent's input for.
+   */
+  int32_t latest_remote_frame;
+  /**
+   * The opponent's most recent ping measurement, or 0 if there hasn't been one yet.
+   */
+  uint64_t ping_us;
+} SlippiMatchQualityFrame;
+
+/**
  * What one STUN server reported for the netplay socket. Filled in by
  * `slprs_stun_parse_response`; leave it zeroed for a server that did not
  * answer.
@@ -489,6 +523,22 @@ void slprs_logging_update_container(const char *kind, bool enabled, int level);
  * For more information, see `dolphin_logger::update_container`.
  */
 void slprs_mainline_logging_update_log_level(int level);
+
+/**
+ * Starts tracking a game. Call when the game's first online frame is handled.
+ */
+void slprs_match_quality_start_game(struct SlippiMatchQualityGameConfig config);
+
+/**
+ * Stops tracking the current game, if any.
+ */
+void slprs_match_quality_end_game(void);
+
+/**
+ * Reports a pass through the online frame handler, halted or not. Returns true once, when the match should be
+ * terminated for poor quality.
+ */
+bool slprs_match_quality_on_frame(struct SlippiMatchQualityFrame frame);
 
 /**
  * Starts a matchmaking session and returns its id. Any session already

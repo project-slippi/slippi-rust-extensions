@@ -15,6 +15,7 @@ pub mod hsd;
 pub mod input_suggestions;
 pub mod jukebox;
 pub mod logger;
+pub mod match_quality;
 pub mod matchmaking;
 pub mod rank_info;
 pub mod user;

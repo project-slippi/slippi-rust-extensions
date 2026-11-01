@@ -1,0 +1,17 @@
+[package]
+name = "slippi-match-quality"
+description = "Watches stalls and rollback depth during online games and decides when a ranked match is too degraded to continue."
+version = "0.1.0"
+authors = [
+    "Slippi Team",
+]
+edition = "2024"
+publish = false
+
+[lib]
+name = "slippi_match_quality"
+path = "src/lib.rs"
+
+[dependencies]
+dolphin-integrations = { path = "../dolphin" }
+tracing = { workspace = true }

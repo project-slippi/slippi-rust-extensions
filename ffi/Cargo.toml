@@ -47,6 +47,7 @@ slippi-hsd = { path = "../hsd" }
 slippi-input-suggestions = { path = "../input-suggestions" }
 slippi-exi-device = { path = "../exi" }
 slippi-jukebox = { path = "../jukebox" }
+slippi-match-quality = { path = "../match-quality" }
 slippi-matchmaking = { path = "../matchmaking" }
 slippi-user = { path = "../user" }
 tracing = { workspace = true }
