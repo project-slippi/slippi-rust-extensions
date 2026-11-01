@@ -87,7 +87,7 @@ impl Remote {
         for (k, slot) in out.iter_mut().enumerate() {
             *slot = *latest;
             if let Some(suggestion) = self.best_suggestion(latest_frame, latest_frame + 1 + k as i32) {
-                // Remote pads only ever carry 8 bytes; the rest of the report is zero
+                // Suggestions only have the inputs; the rest of the report is zero
                 *slot = [0; 12];
                 slot[..8].copy_from_slice(&suggestion.pad);
             }

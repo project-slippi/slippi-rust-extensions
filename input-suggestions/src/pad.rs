@@ -1,5 +1,5 @@
-//! Reproduces the processing between a GameCube adapter report and the 8 bytes Slippi sends over the
-//! network for a frame, plus how far apart two of those inputs are.
+//! Reproduces the processing between a GameCube adapter report and the 8 input bytes Slippi sends over
+//! the network for a frame, plus how far apart two of those inputs are.
 //!
 //! The steps, in order:
 //! 1. `GCAdapter::Input` turns the adapter's bytes for a port into buttons, sticks and triggers.
@@ -8,10 +8,11 @@
 //!    arrives at full precision, so nothing else changes on the way from Dolphin to the game.
 //! 3. `TriggerSendInput.asm` snaps a stick resting within 2 units of center to zero.
 //!
-//! Only the first 8 bytes of the game's 12-byte pad report go over the network: buttons (big endian),
-//! stick x/y, c-stick x/y, L, R.
+//! The first 8 bytes of the game's 12-byte pad report are the inputs: buttons (big endian), stick x/y,
+//! c-stick x/y, L, R. Suggestions send only these. A frame's real pad also sends byte 8, random bits for
+//! the RNG seed, which nothing here uses.
 
-/// The bytes of a pad report that are sent over the network.
+/// The input bytes of a pad report.
 pub const PAD_SIZE: usize = 8;
 pub type Pad = [u8; PAD_SIZE];
 
