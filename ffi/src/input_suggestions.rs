@@ -1,11 +1,14 @@
 //! C FFI for input suggestions. See the `slippi-input-suggestions` crate for how they work.
 //!
-//! These functions are called from three Dolphin threads (the adapter read thread, the CPU thread and
-//! the netplay thread); the crate serializes them internally.
+//! These functions are called from several Dolphin threads (the adapter read thread, the thread that
+//! samples a Standard Controller, the CPU thread and the netplay thread); the crate serializes them
+//! internally.
 
 use std::slice;
 
-use slippi_input_suggestions::{Calibration, GameConfig, LocalFrame, PAD_SIZE, PREDICTED_FRAME_COUNT, Suggestion};
+use slippi_input_suggestions::{
+    Calibration, GameConfig, InputSource, LocalFrame, PAD_SIZE, PREDICTED_FRAME_COUNT, PadStatus, Suggestion,
+};
 
 /// A suggestion the caller should send to the opponents. Ignore it unless `is_valid` is set.
 #[repr(C)]
@@ -43,7 +46,22 @@ pub struct SlippiInputSuggestionsGameConfig {
     pub remote_player_count: u8,
     pub delay: u8,
     pub source_port: u8,
+    /// The source port is a GameCube adapter port.
     pub source_is_adapter: bool,
+    /// The source port is a Standard Controller.
+    pub source_is_standard_controller: bool,
+}
+
+/// The Standard Controller's input, read between game polls.
+#[repr(C)]
+pub struct SlippiInputSuggestionsControllerSample {
+    /// How many game polls of the port had started when the input was read. The game's next poll of the
+    /// port must read this input or a newer one.
+    pub game_poll_count: u64,
+    /// `GCPadStatus::button`.
+    pub button: u16,
+    /// Stick x/y, c-stick x/y, L, R from the `GCPadStatus`.
+    pub analog: [u8; 6],
 }
 
 /// What happened on a local frame: how many times the game has polled the controller port and what it sent.
@@ -62,16 +80,27 @@ pub struct SlippiInputSuggestionsLocalFrame {
 }
 
 /// Starts tracking a game. Call on the CPU thread when the game's first online frame is handled.
+///
+/// Returns whether the caller should sample the Standard Controller on the source port between game polls
+/// for this game, and report each sample with `slprs_input_suggestions_on_controller_sample`.
 #[unsafe(no_mangle)]
-pub extern "C" fn slprs_input_suggestions_start_game(config: SlippiInputSuggestionsGameConfig) {
+pub extern "C" fn slprs_input_suggestions_start_game(config: SlippiInputSuggestionsGameConfig) -> bool {
+    let source = if config.source_is_adapter {
+        InputSource::Adapter
+    } else if config.source_is_standard_controller {
+        InputSource::StandardController
+    } else {
+        InputSource::Other
+    };
+
     slippi_input_suggestions::start_game(GameConfig {
         enabled: config.enabled,
         local_player_idx: config.local_player_idx,
         remote_player_count: config.remote_player_count,
         delay: config.delay,
         source_port: config.source_port,
-        source_is_adapter: config.source_is_adapter,
-    });
+        source,
+    })
 }
 
 /// Stops tracking the current game, if any.
@@ -121,6 +150,20 @@ pub extern "C" fn slprs_input_suggestions_on_adapter_report(
     };
 
     slippi_input_suggestions::on_adapter_report(poll_counts, payload).into()
+}
+
+/// Reports a sample of the Standard Controller on the source port. Call from any thread, only while
+/// `slprs_input_suggestions_start_game` asked for samples. Send the returned suggestion if it is valid.
+#[unsafe(no_mangle)]
+pub extern "C" fn slprs_input_suggestions_on_controller_sample(
+    sample: SlippiInputSuggestionsControllerSample,
+) -> SlippiInputSuggestion {
+    let status = PadStatus {
+        button: sample.button,
+        analog: sample.analog,
+    };
+
+    slippi_input_suggestions::on_controller_sample(sample.game_poll_count, status).into()
 }
 
 /// Reports a suggestion received from a remote player. `pad` points at 8 bytes. Call on the netplay thread.

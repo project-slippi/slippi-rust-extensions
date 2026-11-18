@@ -108,7 +108,14 @@ typedef struct SlippiInputSuggestionsGameConfig {
   uint8_t remote_player_count;
   uint8_t delay;
   uint8_t source_port;
+  /**
+   * The source port is a GameCube adapter port.
+   */
   bool source_is_adapter;
+  /**
+   * The source port is a Standard Controller.
+   */
+  bool source_is_standard_controller;
 } SlippiInputSuggestionsGameConfig;
 
 /**
@@ -138,6 +145,25 @@ typedef struct SlippiInputSuggestionsLocalFrame {
   uint8_t analog_mode;
   uint8_t sent_pad[8];
 } SlippiInputSuggestionsLocalFrame;
+
+/**
+ * The Standard Controller's input, read between game polls.
+ */
+typedef struct SlippiInputSuggestionsControllerSample {
+  /**
+   * How many game polls of the port had started when the input was read. The game's next poll of the
+   * port must read this input or a newer one.
+   */
+  uint64_t game_poll_count;
+  /**
+   * `GCPadStatus::button`.
+   */
+  uint16_t button;
+  /**
+   * Stick x/y, c-stick x/y, L, R from the `GCPadStatus`.
+   */
+  uint8_t analog[6];
+} SlippiInputSuggestionsControllerSample;
 
 /**
  * Settings for a game, passed when it starts.
@@ -404,8 +430,11 @@ void slprs_gamefile_free(struct SlippiResolvedGameFile result);
 
 /**
  * Starts tracking a game. Call on the CPU thread when the game's first online frame is handled.
+ *
+ * Returns whether the caller should sample the Standard Controller on the source port between game polls
+ * for this game, and report each sample with `slprs_input_suggestions_on_controller_sample`.
  */
-void slprs_input_suggestions_start_game(struct SlippiInputSuggestionsGameConfig config);
+bool slprs_input_suggestions_start_game(struct SlippiInputSuggestionsGameConfig config);
 
 /**
  * Stops tracking the current game, if any.
@@ -425,6 +454,12 @@ struct SlippiInputSuggestion slprs_input_suggestions_on_local_frame(struct Slipp
 struct SlippiInputSuggestion slprs_input_suggestions_on_adapter_report(const uint64_t *game_poll_counts,
                                                                        const uint8_t *payload,
                                                                        uintptr_t payload_len);
+
+/**
+ * Reports a sample of the Standard Controller on the source port. Call from any thread, only while
+ * `slprs_input_suggestions_start_game` asked for samples. Send the returned suggestion if it is valid.
+ */
+struct SlippiInputSuggestion slprs_input_suggestions_on_controller_sample(struct SlippiInputSuggestionsControllerSample sample);
 
 /**
  * Reports a suggestion received from a remote player. `pad` points at 8 bytes. Call on the netplay thread.

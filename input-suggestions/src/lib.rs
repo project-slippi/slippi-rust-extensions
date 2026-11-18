@@ -1,17 +1,19 @@
 //! Input suggestions for Slippi Online.
 //!
 //! The game only reads the controller once per frame, but the GameCube adapter delivers new reports
-//! several times per frame. Whenever a report changes the local input by enough to matter, we send it to
-//! the opponent right away as a *suggestion* tagged with the frame it will first apply to. A client that
-//! has to predict an opponent's input uses the newest applicable suggestion instead of repeating the last
-//! input it received.
+//! several times per frame, and Dolphin can sample a Standard Controller several times per frame too.
+//! Whenever a report or sample changes the local input by enough to matter, we send it to the opponent
+//! right away as a *suggestion* tagged with the frame it will first apply to. A client that has to
+//! predict an opponent's input uses the newest applicable suggestion instead of repeating the last input
+//! it received.
 //!
 //! Suggestions only ever feed predictions. The ASM records every prediction and rolls back when the real
 //! input differs, so the game always ends up running on the real inputs on every client.
 //!
-//! All state lives behind one mutex because it is reached from three threads: the adapter read thread
-//! (`on_adapter_report`), the CPU thread (frames and predictions) and the netplay thread (inputs and
-//! suggestions received from peers).
+//! All state lives behind one mutex because it is reached from several threads: the adapter read thread
+//! (`on_adapter_report`), whichever thread samples a Standard Controller (`on_controller_sample`), the
+//! CPU thread (frames and predictions) and the netplay thread (inputs and suggestions received from
+//! peers).
 
 use std::sync::{LazyLock, Mutex, MutexGuard};
 
@@ -20,11 +22,23 @@ use dolphin_integrations::Log;
 mod pad;
 mod remote;
 
-pub use pad::{ADAPTER_PORT_DATA_SIZE, AdapterPortData, Calibration, PAD_SIZE, Pad};
+pub use pad::{ADAPTER_PORT_DATA_SIZE, AdapterPortData, Calibration, PAD_SIZE, Pad, PadStatus};
 pub use remote::PREDICTED_FRAME_COUNT;
 
-use pad::{START_SYNC_FRAME, adapter_to_pad, is_meaningful_change};
+use pad::{START_SYNC_FRAME, adapter_status, is_meaningful_change, status_to_pad};
 use remote::Remote;
+
+/// What the controller port the local player's inputs come from is set to in Dolphin.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InputSource {
+    /// A GameCube adapter port. Its reports arrive on the adapter read thread (`on_adapter_report`).
+    Adapter,
+    /// A Standard Controller (keyboard, XInput, DirectInput, SDL and so on). Dolphin samples it between
+    /// the game's polls (`on_controller_sample`).
+    StandardController,
+    /// Anything else. Nothing reports its input between polls, so no suggestions are produced.
+    Other,
+}
 
 /// Settings for a game, gathered by the EXI device when the game starts.
 #[derive(Clone, Debug)]
@@ -36,8 +50,7 @@ pub struct GameConfig {
     pub delay: u8,
     /// The controller port the game reads the local player's inputs from.
     pub source_port: u8,
-    /// Whether that port is a GameCube adapter port. Suggestions are only produced for the adapter.
-    pub source_is_adapter: bool,
+    pub source: InputSource,
 }
 
 /// Facts about a local frame, reported right after the game polled and sent its input.
@@ -64,17 +77,17 @@ pub struct Suggestion {
     pub pad: Pad,
 }
 
-/// A report stored after a game poll that has not been handled yet. It is for the frame after that poll's,
-/// which is only known once the poll is handled.
+/// An adapter report or controller sample taken after a game poll that has not been handled yet. It is for
+/// the frame after that poll's, which is only known once the poll is handled.
 #[derive(Clone, Copy, Debug)]
-struct PendingReport {
+struct PendingSample {
     poll_count: u64,
-    port_data: AdapterPortData,
+    status: PadStatus,
 }
 
 struct Game {
     config: GameConfig,
-    /// Suggestions are enabled and the local player is on a GameCube adapter port.
+    /// Suggestions are enabled and the local player's port reports its input between polls.
     sending: bool,
     calibration: Option<Calibration>,
     /// The game's poll count as of the frame most recently handled by `on_local_frame`.
@@ -83,7 +96,7 @@ struct Game {
     next_poll_frame: i32,
     /// The newest input the opponents know about from us, as a real input or a suggestion.
     last_communicated: Option<Pad>,
-    pending: Option<PendingReport>,
+    pending: Option<PendingSample>,
     next_seq: u32,
     remotes: Vec<Remote>,
 }
@@ -102,12 +115,12 @@ impl Game {
             enabled = config.enabled,
             delay = config.delay,
             source_port = config.source_port + 1,
-            source_is_adapter = config.source_is_adapter,
+            source = ?config.source,
             "[InputSuggestions] Game started"
         );
 
         Self {
-            sending: config.enabled && config.source_is_adapter,
+            sending: config.enabled && config.source != InputSource::Other,
             config,
             calibration: None,
             handled_poll_count: None,
@@ -127,8 +140,13 @@ impl Game {
         self.sending && self.calibration.is_some() && self.handled_poll_count.is_some()
     }
 
-    fn transform(&self, port_data: &AdapterPortData) -> Option<Pad> {
-        adapter_to_pad(port_data, self.calibration.as_ref()?)
+    /// Whether the caller should sample the Standard Controller and report it with `on_controller_sample`.
+    fn wants_controller_samples(&self) -> bool {
+        self.sending && self.config.source == InputSource::StandardController
+    }
+
+    fn transform(&self, status: &PadStatus) -> Option<Pad> {
+        status_to_pad(status, self.calibration.as_ref()?)
     }
 
     /// Sends `pad` as a suggestion for the next polled frame if it says something the opponents don't
@@ -155,29 +173,49 @@ impl Game {
 
     /// `poll_counts` are the game's poll counts of each port when the report was stored.
     fn on_adapter_report(&mut self, poll_counts: &[u64; 4], payload: &[u8]) -> Option<Suggestion> {
-        if !self.can_send() {
+        if self.config.source != InputSource::Adapter {
             return None;
         }
 
         let port = self.config.source_port as usize;
         let start = 1 + ADAPTER_PORT_DATA_SIZE * port;
         let port_data: AdapterPortData = payload.get(start..start + ADAPTER_PORT_DATA_SIZE)?.try_into().ok()?;
-        let handled_count = self.handled_poll_count?;
         let poll_count = *poll_counts.get(port)?;
+        self.on_sample(poll_count, adapter_status(&port_data))
+    }
 
-        // A poll we already handled read this report or a newer one, and that input has been sent
+    /// `poll_count` is the game's poll count of the port when the sample was read.
+    fn on_controller_sample(&mut self, poll_count: u64, status: PadStatus) -> Option<Suggestion> {
+        if self.config.source != InputSource::StandardController {
+            return None;
+        }
+
+        self.on_sample(poll_count, status)
+    }
+
+    /// Handles the local input read between game polls, from an adapter report or a controller sample.
+    /// `poll_count` is how many game polls of the port had started when it was read; the next poll reads
+    /// this input or a newer one.
+    fn on_sample(&mut self, poll_count: u64, status: PadStatus) -> Option<Suggestion> {
+        if !self.can_send() {
+            return None;
+        }
+
+        let handled_count = self.handled_poll_count?;
+
+        // A poll we already handled read this input or a newer one, and that input has been sent
         if poll_count < handled_count {
             return None;
         }
 
-        // The game polled after this report was stored, so the report is for the frame after that poll's,
-        // which we only learn once the poll is handled. Keep only the newest such report.
+        // The game polled after this input was read, so it is for the frame after that poll's, which we
+        // only learn once the poll is handled. Keep only the newest such input.
         if poll_count > handled_count {
-            self.pending = Some(PendingReport { poll_count, port_data });
+            self.pending = Some(PendingSample { poll_count, status });
             return None;
         }
 
-        let pad = self.transform(&port_data)?;
+        let pad = self.transform(&status)?;
         self.suggest(pad)
     }
 
@@ -202,14 +240,14 @@ impl Game {
             self.last_communicated = Some(info.sent_pad);
         }
 
-        // Release a report stored after this frame's poll, now that we know which frame that poll was
+        // Release an input read after this frame's poll, now that we know which frame that poll was
         let mut candidate = None;
         if let (Some(pending), Some(count)) = (self.pending.take(), self.handled_poll_count) {
             if pending.poll_count > count {
                 // Yet another poll is in flight
                 self.pending = Some(pending);
             } else if pending.poll_count == count {
-                candidate = self.transform(&pending.port_data);
+                candidate = self.transform(&pending.status);
             }
         }
 
@@ -266,9 +304,13 @@ fn lock() -> MutexGuard<'static, Option<Game>> {
     GAME.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// Starts tracking a new game, replacing the previous one.
-pub fn start_game(config: GameConfig) {
-    *lock() = Some(Game::new(config));
+/// Starts tracking a new game, replacing the previous one. Returns whether the caller should sample the
+/// Standard Controller between game polls and report it with `on_controller_sample` for this game.
+pub fn start_game(config: GameConfig) -> bool {
+    let game = Game::new(config);
+    let wants_controller_samples = game.wants_controller_samples();
+    *lock() = Some(game);
+    wants_controller_samples
 }
 
 /// Stops tracking the current game, so nothing more is sent for it.
@@ -285,6 +327,13 @@ pub fn on_local_frame(frame: LocalFrame) -> Option<Suggestion> {
 /// Called on the adapter read thread for each report. May return a suggestion that the caller must send.
 pub fn on_adapter_report(poll_counts: &[u64; 4], payload: &[u8]) -> Option<Suggestion> {
     lock().as_mut()?.on_adapter_report(poll_counts, payload)
+}
+
+/// Called for each sample of the Standard Controller, from any thread. `poll_count` is how many game polls
+/// of the port had started when `status` was read, and the next game poll must read `status` or a newer
+/// input. May return a suggestion that the caller must send.
+pub fn on_controller_sample(poll_count: u64, status: PadStatus) -> Option<Suggestion> {
+    lock().as_mut()?.on_controller_sample(poll_count, status)
 }
 
 pub fn on_remote_suggestion(remote_idx: usize, target_frame: i32, seq: u32, pad: Pad) {
@@ -324,6 +373,7 @@ pub fn fill_predictions(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pad::adapter_to_pad;
 
     fn config() -> GameConfig {
         GameConfig {
@@ -332,8 +382,20 @@ mod tests {
             remote_player_count: 1,
             delay: 2,
             source_port: 0,
-            source_is_adapter: true,
+            source: InputSource::Adapter,
         }
+    }
+
+    fn controller_config() -> GameConfig {
+        GameConfig {
+            source: InputSource::StandardController,
+            ..config()
+        }
+    }
+
+    /// What a Standard Controller with the same input as `port_data(stick_x, a)` reports.
+    fn controller_status(stick_x: u8, a: bool) -> PadStatus {
+        adapter_status(&port_data(stick_x, a))
     }
 
     const CALIBRATION: Calibration = Calibration {
@@ -468,14 +530,54 @@ mod tests {
                 ..config()
             },
             GameConfig {
-                source_is_adapter: false,
+                source: InputSource::Other,
                 ..config()
             },
+            controller_config(),
         ] {
             let mut game = Game::new(config);
             frame(&mut game, 100, 1, port_data(128, false), false);
             assert_eq!(game.on_adapter_report(&[1, 0, 0, 0], &payload(port_data(128, true))), None);
         }
+    }
+
+    /// A Standard Controller sample follows the same frame rules as an adapter report: the poll count it
+    /// was read at decides which frame it is for.
+    #[test]
+    fn controller_samples_target_frames_like_adapter_reports() {
+        let mut game = Game::new(controller_config());
+        frame(&mut game, 100, 1, port_data(128, false), false);
+
+        // Read after poll 1, which was frame 100, so it first applies to 101 + delay
+        let s = game.on_controller_sample(1, controller_status(128, true)).unwrap();
+        assert_eq!(s.target_frame, 103);
+
+        // Read after poll 2, which hasn't been handled yet, so it waits for that poll
+        assert_eq!(game.on_controller_sample(2, controller_status(200, true)), None);
+        let s = frame(&mut game, 101, 2, port_data(128, true), false).unwrap();
+        assert_eq!(s.target_frame, 104);
+
+        // Read before poll 3 was handled as frame 102: that poll read it, and its input was sent
+        frame(&mut game, 102, 3, port_data(128, false), false);
+        assert_eq!(game.on_controller_sample(2, controller_status(128, true)), None);
+    }
+
+    #[test]
+    fn controller_samples_are_only_wanted_from_a_standard_controller() {
+        assert!(Game::new(controller_config()).wants_controller_samples());
+        assert!(!Game::new(config()).wants_controller_samples());
+        assert!(
+            !Game::new(GameConfig {
+                enabled: false,
+                ..controller_config()
+            })
+            .wants_controller_samples()
+        );
+
+        // Samples are ignored when the port is an adapter port
+        let mut game = Game::new(config());
+        frame(&mut game, 100, 1, port_data(128, false), false);
+        assert_eq!(game.on_controller_sample(1, controller_status(128, true)), None);
     }
 
     #[test]

@@ -1,8 +1,10 @@
-//! Reproduces the processing between a GameCube adapter report and the 8 input bytes Slippi sends over
-//! the network for a frame, plus how far apart two of those inputs are.
+//! Reproduces the processing between a controller's input and the 8 input bytes Slippi sends over the
+//! network for a frame, plus how far apart two of those inputs are.
 //!
 //! The steps, in order:
-//! 1. `GCAdapter::Input` turns the adapter's bytes for a port into buttons, sticks and triggers.
+//! 1. Dolphin produces buttons, sticks and triggers (a `GCPadStatus`). For a GameCube adapter port,
+//!    `GCAdapter::Input` makes them from the adapter's bytes for the port (`adapter_status`). A Standard
+//!    Controller's mapping produces them directly.
 //! 2. The game's `PADRead` centers the sticks and subtracts the origin the controller reported, clamping
 //!    so nothing wraps around. Melee polls the controller in analog mode 3, where every stick and trigger
 //!    arrives at full precision, so nothing else changes on the way from Dolphin to the game.
@@ -41,23 +43,50 @@ pub struct Calibration {
     pub analog_mode: u8,
 }
 
-/// Converts the adapter's bytes for a port into the pad the game sends to the opponent, or `None` if the
-/// game isn't polling in Melee's analog mode.
+/// Buttons, sticks and triggers as Dolphin hands them to the emulated controller (`GCPadStatus`), before
+/// the game subtracts the origin.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PadStatus {
+    /// `PAD_BUTTON_*` and `PAD_TRIGGER_*` bits.
+    pub button: u16,
+    /// Stick x/y, c-stick x/y, L, R (unsigned, sticks centered on 128).
+    pub analog: [u8; 6],
+}
+
+/// The `GCPadStatus` bits that reach the game's buttons: Start, Y, X, B, A, L, R, Z and the d-pad.
+const GAME_BUTTONS: u16 = 0x1F7F;
+
+/// What `GCAdapter::Input` makes of the adapter's bytes for a port.
+pub fn adapter_status(port: &AdapterPortData) -> PadStatus {
+    // A port with nothing plugged in reads as a centered pad
+    if port[0] >> 4 == 0 {
+        return PadStatus {
+            button: 0,
+            analog: [0x80, 0x80, 0x80, 0x80, 0, 0],
+        };
+    }
+
+    PadStatus {
+        button: adapter_buttons(port[1], port[2]),
+        analog: [port[3], port[4], port[5], port[6], port[7], port[8]],
+    }
+}
+
+/// Converts the adapter's bytes for a port into the pad the game sends to the opponent.
+#[cfg(test)]
 pub fn adapter_to_pad(port: &AdapterPortData, calibration: &Calibration) -> Option<Pad> {
+    status_to_pad(&adapter_status(port), calibration)
+}
+
+/// Converts a pad status into the pad the game sends to the opponent, or `None` if the game isn't polling
+/// in Melee's analog mode.
+pub fn status_to_pad(status: &PadStatus, calibration: &Calibration) -> Option<Pad> {
     if calibration.analog_mode != MELEE_ANALOG_MODE {
         return None;
     }
 
-    // A port with nothing plugged in reads as a centered pad
-    let (button, raw) = if port[0] >> 4 == 0 {
-        (0, [0x80, 0x80, 0x80, 0x80, 0, 0])
-    } else {
-        (
-            adapter_buttons(port[1], port[2]),
-            [port[3], port[4], port[5], port[6], port[7], port[8]],
-        )
-    };
-
+    let button = status.button & GAME_BUTTONS;
+    let raw = status.analog;
     let origin = calibration.origin;
     let center = |value: u8| value.wrapping_sub(128) as i8;
     let mut stick_x = clamp_s8(center(raw[0]), center(origin[0]));
@@ -242,6 +271,24 @@ mod tests {
         let pad = adapter_to_pad(&port(0x01 | 0x80, 0x01 | 0x08, [128; 4], 0, 0), &CENTERED).unwrap();
         assert_eq!(pad[0], 0x11); // Start | A
         assert_eq!(pad[1], 0x48); // L | Up
+    }
+
+    #[test]
+    fn controller_status_converts_like_the_same_adapter_input() {
+        let status = PadStatus {
+            button: 0x1100 | 0x0048, // Start, A, L, Up
+            analog: [200, 56, 128, 128, 30, 0],
+        };
+        let data = port(0x01 | 0x80, 0x01 | 0x08, [200, 56, 128, 128], 30, 0);
+        assert_eq!(adapter_status(&data), status);
+        assert_eq!(status_to_pad(&status, &CENTERED), adapter_to_pad(&data, &CENTERED));
+
+        // Bits the game never sees as buttons (use origin, get origin, error) are dropped
+        let flagged = PadStatus {
+            button: status.button | 0x0080 | 0x2000 | 0x8000,
+            ..status
+        };
+        assert_eq!(status_to_pad(&flagged, &CENTERED), status_to_pad(&status, &CENTERED));
     }
 
     #[test]
